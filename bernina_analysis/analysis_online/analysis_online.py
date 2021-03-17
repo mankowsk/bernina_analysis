@@ -33,7 +33,7 @@ class TtProcessor:
         self.step_type=step_type
         self.direction=direction
         self.step_width = step_width
-        self.pid
+        self.pid=deque([],Nshots*memory)
         self.corr_pos = deque([],Nshots*memory)
         self.corr_pos_av = deque([],memory)
         self.corr_pos_av_std  = deque([],memory)

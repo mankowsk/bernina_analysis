@@ -10,7 +10,7 @@ from time import sleep
 from epics import PV
 import os
 from ..utilities.utilities import on_off
-from ..utilities.utilities import find_fall
+from ..utilities.utilities import find_fall, find_rise
 
 
 
@@ -19,16 +19,17 @@ from ..utilities.utilities import find_fall
 
 
 class TtProcessor:
-    def __init__(self,Nshots = 100, step_type='data', step_width=200):
+    def __init__(self,Nshots = 100, step_type='data', direction='rising', step_width=200):
         """
         Nshots:     number of shots acquired before each evaluation
-        step_type:  can be 'data', 'falling' or 'rising'. 
-            'data', the first 100 evaluation is used to extract the reference from the data. 
-            'falling' or 'rising', an errorfunction is used instead"""
+        step_type:  'data' or 'erf'
+        direction:  'falling' or 'rising'. 
+            'data', the first 100 evaluation is used to extract the reference from the data."""
         #self.feedback = PV('', auto_monitor=True)
         self.Nshots = Nshots
         self.roi=None
         self.step_type=step_type
+        self.direction=direction
         self.step_width = step_width
         self.corr_pos = deque([],2000)
         self.corr_pos_av = deque([],300)
@@ -113,20 +114,23 @@ class TtProcessor:
                 tt_sig['off_sm'] = scipy.ndimage.uniform_filter(tt_sig['off'], size=(10,10))
                 tt_sig['on_sm'] = scipy.ndimage.uniform_filter(tt_sig['on'], size=(1,10))
                 self.ratio_av=np.mean(tt_sig['on_sm'][:100],axis=0)/np.mean(tt_sig['off_sm'][:100],axis=0)-1
-                cen, amp = find_fall(self.ratio_av)
+                if self.direction == 'falling':
+                    cen, amp = find_fall(self.ratio_av)
+                else:
+                    cen, amp = find_rise(self.ratio_av)
                 if cen < self.step_width:
                     cen = self.step_width
                 elif len(self.ratio_av)-cen < self.step_width:
                     cen = len(self.ratio_av)- self.step_width
                 self.roi = [int(cen-self.step_width), int(cen+self.step_width)]
-            elif self.step_type == 'rising':
+
+            elif self.step_type == 'erf':
                 pts = len(self.tt_sig[-1])
                 self.ratio_av = scipy.special.erf(np.linspace(start=-pts*2/self.step_width, stop=pts*2/self.step_width, num=pts))
                 self.roi = [int(pts/2-self.step_width), int(pts/2+self.step_width)]
-            elif self.step_type == 'falling':
-                pts = len(self.tt_sig[-1])
-                self.ratio_av = -scipy.special.erf(np.linspace(start=-pts*2/self.step_width, stop=pts*2/self.step_width, num=pts))
-                self.roi = [int(pts/2-self.step_width), int(pts/2+self.step_width)]
+                if self.direction == 'falling':
+                    self.ratio_av = -self.ratio_av
+
 
 
         corr_pos, corr_amp, tt_ratio_sm = self.analyse_edge_correlation_noea(tt_sig, ids, ratio_av=self.ratio_av, roi=self.roi)

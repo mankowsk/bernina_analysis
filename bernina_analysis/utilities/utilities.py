@@ -97,18 +97,18 @@ def find_edge(data, step_length=50, edge_type='falling', step_type='heaviside', 
 
 def find_fall(a,frac=0.5):
     a = np.flip(a)
-    a = a-np.max(a)
-    imx = np.argmin(a)
+    a = a-np.min(a)
+    imx = np.argmax(a)
     print('imx',imx)
     #print(imx, np.argmin(a[mxpts[0]:mxpts[1]]-bg)+mxpts[0])
     try:
-        riseTime = np.interp(-frac*a[imx],-a,np.arange(len(a)))
-        riseBin = np.round(riseTime)
+        riseTime = np.interp(frac*a[imx],a,np.arange(len(a)))
+        riseBin = len(a)-np.round(riseTime)
     except:
         print('interpolation failed')
         riseTime = np.NAN
         riseBin = np.NAN
-    return riseBin, a[imx]
+    return riseBin, -a[imx]
 
 def find_hm(a):
     a = a-np.min(a)

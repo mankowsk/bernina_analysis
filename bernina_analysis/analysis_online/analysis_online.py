@@ -29,6 +29,7 @@ class TtProcessor:
         self.Nshots = Nshots
         self.roi=None
         self.save = save
+        self.savedir = savedir
         self.memory = memory
         self.step_type=step_type
         self.direction=direction
@@ -155,7 +156,7 @@ class TtProcessor:
             self.pid_1 = ids['on'][-1]
             self.counter_glob = 0
             if self.save:
-                np.save(f'av_{self.pid_1}_{self_pid_2}.npy',[self.corr_pos_av, self.corr_pos_av_std, self.corr_amp_av, self.corr_amp_av_std])
+                np.save(f'av_{self.pid_1}_{self.pid_2}.npy',[self.corr_pos_av, self.corr_pos_av_std, self.corr_amp_av, self.corr_amp_av_std])
         return
 
     def setup_plot(self):

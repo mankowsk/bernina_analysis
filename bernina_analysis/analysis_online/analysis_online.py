@@ -19,7 +19,7 @@ from ..utilities.utilities import find_fall, find_rise
 
 
 class TtProcessor:
-    def __init__(self,Nshots = 100, step_type='data', direction='rising', step_width=200):
+    def __init__(self,Nshots = 100, memory=300, step_type='data', direction='rising', step_width=200, dave=False, savedir = '/gpfs/photonics/swissfel/res/bernina-staff/p19125/drift_data/bsen'):
         """
         Nshots:     number of shots acquired before each evaluation
         step_type:  'data' or 'erf'
@@ -28,15 +28,17 @@ class TtProcessor:
         #self.feedback = PV('', auto_monitor=True)
         self.Nshots = Nshots
         self.roi=None
+        self.memory = memory
         self.step_type=step_type
         self.direction=direction
         self.step_width = step_width
-        self.corr_pos = deque([],2000)
-        self.corr_pos_av = deque([],300)
-        self.corr_pos_av_std  = deque([],300)
-        self.corr_amp = deque([],2000)
-        self.corr_amp_av = deque([],300)
-        self.corr_amp_av_std = deque([],300)
+        self.pid
+        self.corr_pos = deque([],Nshots*memory)
+        self.corr_pos_av = deque([],memory)
+        self.corr_pos_av_std  = deque([],memory)
+        self.corr_amp = deque([],Nshots*memory)
+        self.corr_amp_av = deque([],memory)
+        self.corr_amp_av_std = deque([],memory)
         self.feedback = True
         self.tt_sig = np.ndarray((Nshots))
         self.tt_ratio_sm = None
@@ -46,6 +48,9 @@ class TtProcessor:
         self.fig = None
         self._running = True
         self.verbose = 0
+        self.counter_glob = 0
+        self.pid_1 = 0
+        self.pid_2 = 0
         self.accumulator = Thread(target=self.run_continuously)
         self.accumulator.start()
 
@@ -98,6 +103,7 @@ class TtProcessor:
         return corr_pos, corr_amp, tt_ratio_sm
 
     def evaluate(self):
+
         if self.verbose ==1:
             print(f'ids {self.ids.shape}')
             print(self.ids)
@@ -107,6 +113,8 @@ class TtProcessor:
             print(self.tt_sig[:10,25])
 
         tt_sig, ids = on_off([self.tt_sig, self.ids], self.evts)
+        if self.counter_glob ==0:
+            self.pid_1 = ids['on'][0]
         if self.ratio_av is None:
             if self.step_type == 'data':
                 if len(ids['off'])==0:
@@ -131,20 +139,22 @@ class TtProcessor:
                 if self.direction == 'falling':
                     self.ratio_av = -self.ratio_av
 
-
-
         corr_pos, corr_amp, tt_ratio_sm = self.analyse_edge_correlation_noea(tt_sig, ids, ratio_av=self.ratio_av, roi=self.roi)
         self.tt_ratio_sm = tt_ratio_sm
-        print('analysed')
+
+        self.pid.append(ids['on'])
         self.corr_pos.append(corr_pos)
         self.corr_pos_av.append(np.median(corr_pos))
         self.corr_pos_av_std.append(np.std(corr_pos))
         self.corr_amp.append(corr_amp)
         self.corr_amp_av.append(np.median(corr_amp))
         self.corr_amp_av_std.append(np.std(corr_amp))
-        #if not self.fig:
-        #    self.setup_plot()
-        #self.update_plot()
+        self.counter_glob = self.counter_glob +1
+        if self.counter_glob ==self.memory:
+            self.pid_1 = ids['on'][-1]
+            self.counter_glob = 0
+            if save:
+                np.save(f'av_{self.pid_1}_{self_pid_2}.npy',[self.corr_pos_av, self.corr_pos_av_std, self.corr_amp_av, self.corr_amp_av_std])
         return
 
     def setup_plot(self):

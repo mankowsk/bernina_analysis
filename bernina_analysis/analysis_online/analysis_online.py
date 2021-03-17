@@ -153,10 +153,11 @@ class TtProcessor:
         self.corr_amp_av_std.append(np.std(corr_amp))
         self.counter_glob = self.counter_glob +1
         if self.counter_glob ==self.memory:
-            self.pid_1 = ids['on'][-1]
+            self.pid_2 = ids['on'][-1]
             self.counter_glob = 0
             if self.save:
-                np.save(f'av_{self.pid_1}_{self.pid_2}.npy',[self.corr_pos_av, self.corr_pos_av_std, self.corr_amp_av, self.corr_amp_av_std])
+                np.save(f'{int(self.Nshots)}av_{int(self.pid_1)}_{int(self.pid_2)}.npy',[self.corr_pos_av, self.corr_pos_av_std, self.corr_amp_av, self.corr_amp_av_std])
+                np.save(f'single_{int(self.pid_1)}_{int(self.pid_2)}.npy',[self.pid, self.corr_pos, self.corr_amp])
         return
 
     def setup_plot(self):

@@ -5,7 +5,6 @@ import escape
 import os
 import time
 import json
-from esc_hundle import JF_Handler_Escape
 import datastorage as dsg
 import time
 import dask.array as da
@@ -28,13 +27,13 @@ class Data_Reduction():
         """load config file"""
         self.cfg_file = cfg_file
         self.cfg= {}
-        self.update_cfg_from_file()
+        self.update_cfg()
         """global parameters"""
         self.dir_save = '/sf/bernina/data/{}/work/analysis/{}/'.format(self.cfg['Exp_config']['pgroup'] ,self.cfg['Exp_config']['save_folder'])
         self.channels = {}
         self.ds = {}
 
-    def update_cfg_from_file(self, cfg_file=None):
+    def update_cfg(self, cfg_file=None):
         if not cfg_file:
             cfg_file=self.cfg_file
         if type(cfg_file) == dict:
@@ -59,13 +58,13 @@ class Data_Reduction():
                         self.cfg['JFs'][jf][key]=None
 
         
-    def _setup_data_handlers(self, scan_info):
+    def setup_data_handlers(self, scan_info):
         jf_handlers = {}
         for jf, jf_cfg in self.cfg['JFs'].items():
             pedestal_file = self.cfg['Exp_config']['pedestal_file']+f".{jf_cfg['id']}.res.h5"
             gain_file = self.cfg['Exp_config']['gain_file']
             jf_file = [file for file in scan_info['scan_files'][0] if jf_cfg['id'] in file][0]
-            jf_handlers[jf] = JF_Handler_Escape(
+            jf_handlers[jf] = ju.EscapeAdapter(
                     file_path = jf_file, 
                     gain_file = gain_file, 
                     pedestal_file = pedestal_file,
@@ -82,17 +81,27 @@ class Data_Reduction():
         data = sf.parseScanEco_v01(json_file,createEscArrays=True, memlimit_mD_MB=500,exclude_from_files= exclude_files)
         info, info_path = sf.readScanEcoJson_v01(json_file)
         return data, info
+
+    def parse_step_from_scan(self, runno, step, exclude_files):
+        pgroup = self.cfg['Exp_config']['pgroup']
+        json_dir = Path(f'/sf/bernina/data/{pgroup}/res/scan_info/')
+        json_file = list(json_dir.glob(f'run{runno:04}*'))[0]
+        print(f'Parsing {json_file}')
+        data = sf.parseScanEco_v01(json_file,createEscArrays=True, memlimit_mD_MB=500,exclude_from_files= exclude_files)
+        info, info_path = sf.readScanEcoJson_v01(json_file)
+        return data, info
     
-    def _apply_threshold(self, data, threshold):
+    
+    def apply_threshold(self, data, threshold):
         data[data<threshold] = 0
         return data
     
-    def _apply_energy_limits(self, data, energy_limits):
+    def apply_energy_limits(self, data, energy_limits):
         data[data<np.min(energy_limits)] = 0
         data[data>np.max(energy_limits)] = 0
         return data
 
-    def _setup_ds(self, fname):
+    def setup_ds(self, fname):
         ds = dsg.DataStorage(filename = fname)
         print('Setting up datastorage file')
         ds['config'] = self.cfg
@@ -101,7 +110,7 @@ class Data_Reduction():
         ds.save()
         return ds
 
-    def _setup_filename(self, runno, name, overwrite):
+    def setup_filename(self, runno, name, overwrite):
         fname = '{}run_{}.h5'.format(self.dir_save, runno)
         if name: 
             fname = '{}run_{}_{}.h5'.format(self.dir_save, runno, name)
@@ -118,22 +127,22 @@ class Data_Reduction():
                 print(mes)
             if mes:
                 os.remove(fname)
-                ds = self._setup_ds(fname)
+                ds = self.setup_ds(fname)
                 ds.save()
             elif not mes:
                 ds = dsg.DataStorage(filename = fname)
             else:
                 fname = '{}run_{}_{}.h5'.format(self.dir_save, runno, mes)
-                ds = self._setup_ds(fname)
+                ds = self.setup_ds(fname)
                 ds.save()
         else:
-            ds = self._setup_ds(fname)
+            ds = self.setup_ds(fname)
             ds.save()
         print(fname)
         return ds, fname
 
 
-    def _setup_data_reduction_rois(self, jf_handlers, data):
+    def setup_rois2(self, jf_handlers, data):
         jfs_rois={}
         for jf, jf_cfg in self.cfg['JFs'].items():
             try:
@@ -141,12 +150,12 @@ class Data_Reduction():
                 jf_data = jf_data.map_index_blocks(jf_handlers[jf].handler.process, geometry=True, gap_pixels=True, dtype=np.float32)
                 threshold = jf_cfg['threshold']
                 if not threshold == None:
-                    jf_data = jf_data.map_index_blocks(self._apply_threshold, threshold=threshold,dtype=np.float32)
+                    jf_data = jf_data.map_index_blocks(self.apply_threshold, threshold=threshold,dtype=np.float32)
             
                 energy_limits = jf_cfg['energy_limits']
                 if not energy_limits == None:
                     print('Applying the super cool new energy limits!')
-                    jf_data = jf_data.map_index_blocks(self._apply_energy_limits, energy_limits=energy_limits,dtype=np.float32)
+                    jf_data = jf_data.map_index_blocks(self.apply_energy_limits, energy_limits=energy_limits,dtype=np.float32)
                 jfs_rois[jf]={'rois':{}, 'rois_img':{}}
                 for roi, roi_rng in jf_cfg['rois'].items():
                     r = roi_rng
@@ -159,7 +168,7 @@ class Data_Reduction():
 
         return jfs_rois
 
-    def showdata(self, runno, step,exclude_files='CAMERA', jf=None, maxshots = None, clim=(0,20), show_hist=True):
+    def showdata(self, runno, step,exclude_files, jf=None, maxshots = None, clim=(0,20), hist_lineout = False):
         if not jf:
             jf = 'JFscatt'
         jf_cfg = self.cfg['JFs'][jf]
@@ -169,7 +178,7 @@ class Data_Reduction():
         json_dir = Path(f'/sf/bernina/data/{pgroup}/res/scan_info/')
         print(json_dir)
         json_file = list(json_dir.glob(f'run{runno:04}*'))[0]
-
+        data = {}
         p = Path(json_file)
         with p.open(mode="r") as f:
             s = json.load(f)
@@ -192,9 +201,71 @@ class Data_Reduction():
                 y, bins = np.histogram(*args,**kwargs)
                 return y
             bins = np.linspace(-5,50,400)
-            hists_vertical = np.apply_along_axis(hist_only_y, 1,np.hstack(imgs_ju), bins=bins)           
-            hist_av = np.histogram(imgs_ju, bins=bins)
-            
+            if hist_lineout:
+                hists_vertical = np.apply_along_axis(hist_only_y, 1,np.hstack(imgs_ju), bins=bins)           
+                data['hists_vertical']=hists_vertical
+            hist_av = np.histogram(imgs_ju[:100], bins=bins)
+            data['hist_av']=hist_av
+        fig = plt.figure(num='Run_{}, Step_{}. Nbr_shots = {}'.format(runno,step, nshots), figsize=(9,9))
+        ax0= fig.add_subplot(1,2,1)
+        ax0.imshow(img,clim=clim,origin='lower')
+        ax1=[]
+
+        rois = jf_cfg['rois']
+        rois_img = jf_cfg['rois_img']
+
+        print(rois)
+        print(rois_img)
+        for i in range(1,len(rois)+len(rois_img)+1):
+            ax1.append(fig.add_subplot(len(rois)+len(rois_img),2,2*i))
+           
+        for i,(r,r_rng)  in enumerate(rois.items()):
+            ax1[i].imshow(self.mkroi(img, r_rng),clim=clim)
+            ax1[i].set_title('{}'.format(r))
+            rr =r_rng
+            ax0.add_patch(Rectangle((rr[2], rr[0]), abs(rr[2]-rr[3]),abs(rr[1]-rr[0]),fill=None, 
+                          alpha=1,linewidth=2, edgecolor='r'))    
+                                              
+        for i,(r,r_rng)  in enumerate(rois_img.items()):
+            i +=len(rois.keys())
+            ax1[i].imshow(self.mkroi(img, r_rng),clim=clim)
+            ax1[i].set_title('Img {}'.format(r))
+            rr =r_rng
+            ax0.add_patch(Rectangle((rr[2], rr[0]), abs(rr[2]-rr[3]),abs(rr[1]-rr[0]),fill=None, 
+                          alpha=1,linewidth=2, edgecolor='g'))    
+        plt.tight_layout()
+        hist = plt.figure('histogram', figsize=(9,3))
+        plt.plot(hist_av[1][:-1],hist_av[0])
+        plt.xlabel('energy (keV)')
+        plt.ylabel('px/bin')
+        plt.yscale('log')
+        plt.ylim(hist_av[0][-1],np.max(hist_av[0]))
+        plt.tight_layout()
+        data['img']=img
+        data['fig']=fig
+        data['hist_bins']=bins
+        return data
+
+    def showdata_old(self, runno, step,exclude_files, jf=None, maxshots = [0, None], clim=(0,20)):
+        data, scan_info = self.parse_scan(runno,exclude_files)
+        poss = np.squeeze(scan_info['scan_values'])
+        jf_handlers = self.setup_data_handlers(scan_info)
+        if not jf:
+            jf = 'JFscatt'
+        jf_cfg = self.cfg['JFs'][jf]
+        #jf_data = data[jf_cfg['id']].scan[step]
+        jf_data = data[jf_cfg['id']]
+        if maxshots:
+            jf_data = jf_data[maxshots[0]:maxshots[1],:,:]
+        imgs = jf_data.map_index_blocks(jf_handlers[jf].handler.process, geometry=True, gap_pixels=True, dtype=np.float32)
+        threshold = jf_cfg['threshold']
+        if not threshold == None:
+            jf_data = jf_data.map_index_blocks(self.apply_threshold, threshold=threshold,dtype=np.float32)
+        nshots = imgs.shape[0]
+        imgs = np.nanmean(imgs,axis=0).compute()
+        nshots = len(imgs)
+        #img = np.nanmean(imgs.data, axis=0)
+
         fig = plt.figure(num='Run_{}, Step_{}. Nbr_shots = {}'.format(runno,step, nshots), figsize=(9,9))
         ax0= fig.add_subplot(1,2,1)
         ax0.imshow(img,clim=clim,origin='lower')
@@ -209,7 +280,7 @@ class Data_Reduction():
             ax1.append(fig.add_subplot(len(rois)+len(rois_img),2,2*i))
            
         for i,(r,r_rng)  in enumerate(rois.items()):
-            ax1[i].imshow(self._mkroi(img, r_rng),clim=clim)
+            ax1[i].imshow(self.mkroi(img, r_rng),clim=clim)
             ax1[i].set_title('{}'.format(r))
             rr =r_rng
             ax0.add_patch(Rectangle((rr[2], rr[0]), abs(rr[2]-rr[3]),abs(rr[1]-rr[0]),fill=None, 
@@ -217,19 +288,20 @@ class Data_Reduction():
                                               
         for i,(r,r_rng)  in enumerate(rois_img.items()):
             i +=len(rois.keys())
-            ax1[i].imshow(self._mkroi(img, r_rng),clim=clim)
+            ax1[i].imshow(self.mkroi(img, r_rng),clim=clim)
             ax1[i].set_title('Img {}'.format(r))
             rr =r_rng
             ax0.add_patch(Rectangle((rr[2], rr[0]), abs(rr[2]-rr[3]),abs(rr[1]-rr[0]),fill=None, 
                           alpha=1,linewidth=2, edgecolor='g'))    
         plt.tight_layout()
 
-        return img, fig, bins, hist_av, hists_vertical
+        return fig
 
-    def _mkroi(self, dat, r):
+    def mkroi(self, dat, r):
         return dat[r[0]:r[1],r[2]:r[3]]
 
-    def _update_channels(self):
+
+    def update_channels(self):
         jf_ids = [self.cfg['JFs'][jf]['id'] for jf in self.cfg['JFs'].keys()]
         bs_ids =  [self.cfg['BSs'][bs]['id'] for bs in self.cfg['BSs'].keys()]
         for jf_id in jf_ids:
@@ -244,10 +316,10 @@ class Data_Reduction():
         data, scan_info = self.parse_scan(runno,exclude_files)
         poss = np.squeeze(scan_info['scan_values'])
         self.channels = list(data.keys())
-        self._update_channels()
+        self.update_channels()
 
-        jf_handlers = self._setup_data_handlers(scan_info)
-        ds, fname = self._setup_filename(runno, name, overwrite)
+        jf_handlers = self.setup_data_handlers(scan_info)
+        ds, fname = self.setup_filename(runno, name, overwrite)
         self.ds = ds
 
         with h5py.File(Path(fname).expanduser(), 'a') as f:
@@ -268,7 +340,7 @@ class Data_Reduction():
 
 
 
-            jfs_rois = self._setup_data_reduction_rois(jf_handlers, data)
+            jfs_rois = self.setup_rois2(jf_handlers, data)
             if len(jfs_rois.keys()) > 0:
                 print('Computing JFs')
 
@@ -284,4 +356,3 @@ class Data_Reduction():
                         rois_comp.append(roi_data)
                 print('Computing JF {}'.format(jf))
                 esc.storage.store(rois_comp)
-

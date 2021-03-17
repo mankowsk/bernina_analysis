@@ -55,8 +55,6 @@ def analyse_edge_correlation(tt_sig, ratio_av=None, roi=[650,1350]):
     tt_sig['on_sm'] = tt_sig['on'].map_index_blocks(scipy.ndimage.uniform_filter, size=(1,10))
     idx = np.digitize(tt_sig['on'].index, tt_sig['off'].index[:-1]-0.5)
     tt_ratio_sm = esc.Array(index=tt_sig['on_sm'].index, data=tt_sig['on_sm'].data/tt_sig['off_sm'].data[idx]-1, step_lengths=tt_sig['on_sm'].scan.step_lengths, parameter =tt_sig['on_sm'].scan.parameter )
-    if not ratio_av:
-        ratio_av=tt_sig['on_sm'][:100].mean(axis=0).compute()/tt_sig['off_sm'][:100].mean(axis=0).compute()-1
     corr = tt_ratio_sm.map_index_blocks(scipy.ndimage.correlate1d, ratio_av[roi[0]:roi[1]], axis=1, dtype=np.float64)
     corr = corr.compute()
     corr_amp = np.max(corr.data, axis=1)

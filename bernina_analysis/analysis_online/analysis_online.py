@@ -122,12 +122,12 @@ class TtProcessor:
                     cen = self.step_width
                 elif len(self.ratio_av)-cen < self.step_width:
                     cen = len(self.ratio_av)- self.step_width
-                self.roi = [int(cen-self.step_width), int(cen+self.step_width)]
+                self.roi = [int(cen-self.step_width/2), int(cen+self.step_width/2)]
 
             elif self.step_type == 'erf':
                 pts = len(self.tt_sig[-1])
                 self.ratio_av = scipy.special.erf(np.linspace(start=-pts*2/self.step_width, stop=pts*2/self.step_width, num=pts))
-                self.roi = [int(pts/2-self.step_width), int(pts/2+self.step_width)]
+                self.roi = [int(pts/2-self.step_width/2), int(pts/2+self.step_width/2)]
                 if self.direction == 'falling':
                     self.ratio_av = -self.ratio_av
 

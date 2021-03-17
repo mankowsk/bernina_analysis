@@ -117,11 +117,11 @@ class TtProcessor:
                 self.roi = [cen-self.step_width, cen+self.step_width]
             elif self.step_type == 'rising':
                 pts = len(self.tt_sig[-1])
-                self.ratio_av = scipy.special.erf(np.linspace(start=-pts*2/self.step_width, stop=-pts*2/self.step_width, num=pts))
+                self.ratio_av = scipy.special.erf(np.linspace(start=-pts*2/self.step_width, stop=pts*2/self.step_width, num=pts))
                 self.roi = [pts/2-self.step_width, pts/2+self.step_width]
             elif self.step_type == 'falling':
                 pts = len(self.tt_sig[-1])
-                self.ratio_av = -scipy.special.erf(np.linspace(start=-pts*2/self.step_width, stop=-pts*2/self.step_width, num=pts))
+                self.ratio_av = -scipy.special.erf(np.linspace(start=-pts*2/self.step_width, stop=pts*2/self.step_width, num=pts))
                 self.roi = [pts/2-self.step_width, pts/2+self.step_width]
 
 

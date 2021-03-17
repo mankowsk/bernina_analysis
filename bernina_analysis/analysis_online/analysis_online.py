@@ -19,7 +19,7 @@ from ..utilities.utilities import find_fall, find_rise
 
 
 class TtProcessor:
-    def __init__(self,Nshots = 100, memory=300, step_type='data', direction='rising', step_width=200, dave=False, savedir = '/gpfs/photonics/swissfel/res/bernina-staff/p19125/drift_data/bsen'):
+    def __init__(self,Nshots = 100, memory=300, step_type='data', direction='rising', step_width=200, save=False, savedir = '/gpfs/photonics/swissfel/res/bernina-staff/p19125/drift_data/bsen'):
         """
         Nshots:     number of shots acquired before each evaluation
         step_type:  'data' or 'erf'
@@ -28,6 +28,7 @@ class TtProcessor:
         #self.feedback = PV('', auto_monitor=True)
         self.Nshots = Nshots
         self.roi=None
+        self.save = save
         self.memory = memory
         self.step_type=step_type
         self.direction=direction
@@ -153,7 +154,7 @@ class TtProcessor:
         if self.counter_glob ==self.memory:
             self.pid_1 = ids['on'][-1]
             self.counter_glob = 0
-            if save:
+            if self.save:
                 np.save(f'av_{self.pid_1}_{self_pid_2}.npy',[self.corr_pos_av, self.corr_pos_av_std, self.corr_amp_av, self.corr_amp_av_std])
         return
 

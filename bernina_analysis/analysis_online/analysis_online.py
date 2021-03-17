@@ -18,10 +18,17 @@ from ..utilities.utilities import on_off
 
 
 class TtProcessor:
-    def __init__(self,Nshots = 100, roi=[650,1350]):
+    def __init__(self,Nshots = 100, roi=[650,1350], step_type='data', step_length=50):
+        """Nshots are the number of shots acquired before each evaluation
+        roi is the region, in which the edge is expected and is only used to reconstruct the reference if step_type='data'
+        step_type can be 'data', 'falling' or 'rising'. 
+        If it is 'data', the first 100 evaluation is used to extract the reference from the data. 
+        If it is 'falling' or 'rising', an errorfunction is used instead"""
         #self.feedback = PV('', auto_monitor=True)
         self.Nshots = Nshots
         self.roi=roi
+        self.step_type=step_type
+        self.step_length = step_length
         self.corr_pos = deque([],2000)
         self.corr_pos_av = deque([],300)
         self.corr_pos_av_std  = deque([],300)
@@ -99,11 +106,16 @@ class TtProcessor:
 
         tt_sig, ids = on_off([self.tt_sig, self.ids], self.evts)
         if self.ratio_av is None:
-            if len(ids['off'])==0:
-                print("No delayed shots")
-            tt_sig['off_sm'] = scipy.ndimage.uniform_filter(tt_sig['off'], size=(10,10))
-            tt_sig['on_sm'] = scipy.ndimage.uniform_filter(tt_sig['on'], size=(1,10))
-            self.ratio_av=np.mean(tt_sig['on_sm'][:100],axis=0)/np.mean(tt_sig['off_sm'][:100],axis=0)-1
+            if step_type == 'data':
+                if len(ids['off'])==0:
+                    print("No delayed shots")
+                tt_sig['off_sm'] = scipy.ndimage.uniform_filter(tt_sig['off'], size=(10,10))
+                tt_sig['on_sm'] = scipy.ndimage.uniform_filter(tt_sig['on'], size=(1,10))
+                self.ratio_av=np.mean(tt_sig['on_sm'][:100],axis=0)/np.mean(tt_sig['off_sm'][:100],axis=0)-1
+            elif step_type == 'rising':
+                self.ratio_av = scipy.special.erf(np.arange(-self.step_length/2, self.step_length/2))
+            elif step_type == 'falling':
+                self.ratio_av = -scipy.special.erf(np.arange(-self.step_length/2, self.step_length/2))
         corr_pos, corr_amp, tt_ratio_sm = self.analyse_edge_correlation_noea(tt_sig, ids, ratio_av=self.ratio_av, roi=self.roi)
         self.tt_ratio_sm = tt_ratio_sm
         print('analysed')

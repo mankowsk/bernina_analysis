@@ -19,7 +19,7 @@ from ..utilities.utilities import find_fall, find_rise
 
 
 class TtProcessor:
-    def __init__(self,Nshots = 100, memory=300, step_type='data', direction='rising', step_width=200, save=False, savedir = '/gpfs/photonics/swissfel/res/bernina-staff/p19125/drift_data/bsen'):
+    def __init__(self,Nshots = 100, memory=300, step_type='data', direction='rising', step_width=200, save=False, savedir = '/gpfs/photonics/swissfel/res/bernina-staff/p19125/drift_data/bsen/'):
         """
         Nshots:     number of shots acquired before each evaluation
         step_type:  'data' or 'erf'
@@ -156,8 +156,8 @@ class TtProcessor:
             self.pid_2 = ids['on'][-1]
             self.counter_glob = 0
             if self.save:
-                np.save(f'{int(self.Nshots)}av_{int(self.pid_1)}_{int(self.pid_2)}.npy',[self.corr_pos_av, self.corr_pos_av_std, self.corr_amp_av, self.corr_amp_av_std])
-                np.save(f'single_{int(self.pid_1)}_{int(self.pid_2)}.npy',[self.pid, self.corr_pos, self.corr_amp])
+                np.save(f'{self.savedir}/av/{int(self.Nshots)}av_{int(self.pid_1)}_{int(self.pid_2)}.npy',[self.corr_pos_av, self.corr_pos_av_std, self.corr_amp_av, self.corr_amp_av_std])
+                np.save(f'{self.savedir}/single/single_{int(self.pid_1)}_{int(self.pid_2)}.npy',[np.hstack(self.pid), np.hstack(self.corr_pos), np.hstack(self.corr_amp)])
         return
 
     def setup_plot(self):

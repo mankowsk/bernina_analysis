@@ -114,15 +114,15 @@ class TtProcessor:
                 tt_sig['on_sm'] = scipy.ndimage.uniform_filter(tt_sig['on'], size=(1,10))
                 self.ratio_av=np.mean(tt_sig['on_sm'][:100],axis=0)/np.mean(tt_sig['off_sm'][:100],axis=0)-1
                 cen, amp = find_fall(self.ratio_av)
-                self.roi = [cen-self.step_width, cen+self.step_width]
+                self.roi = [int(cen-self.step_width), int(cen+self.step_width)]
             elif self.step_type == 'rising':
                 pts = len(self.tt_sig[-1])
                 self.ratio_av = scipy.special.erf(np.linspace(start=-pts*2/self.step_width, stop=pts*2/self.step_width, num=pts))
-                self.roi = [pts/2-self.step_width, pts/2+self.step_width]
+                self.roi = [int(pts/2-self.step_width), int(pts/2+self.step_width)]
             elif self.step_type == 'falling':
                 pts = len(self.tt_sig[-1])
                 self.ratio_av = -scipy.special.erf(np.linspace(start=-pts*2/self.step_width, stop=pts*2/self.step_width, num=pts))
-                self.roi = [pts/2-self.step_width, pts/2+self.step_width]
+                self.roi = [int(pts/2-self.step_width), int(pts/2+self.step_width)]
 
 
         corr_pos, corr_amp, tt_ratio_sm = self.analyse_edge_correlation_noea(tt_sig, ids, ratio_av=self.ratio_av, roi=self.roi)

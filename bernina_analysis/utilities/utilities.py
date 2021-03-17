@@ -96,14 +96,26 @@ def find_edge(data, step_length=50, edge_type='falling', step_type='heaviside', 
     return edge_position, xcorr_amplitude
 
 def find_fall(a,frac=0.5):
-    a = np.flip(a)
-    a = a-np.min(a)
-    imx = np.argmax(a)
+    a = -a
+    a = a -np.max(a)
+    imx = np.argmin(a)
     print('imx',imx)
-    #print(imx, np.argmin(a[mxpts[0]:mxpts[1]]-bg)+mxpts[0])
     try:
-        riseTime = np.interp(frac*a[imx],a,np.arange(len(a)))
-        riseBin = len(a)-np.round(riseTime)
+        riseTime = np.interp(frac*a[imx],a[imx:],np.arange(len(a[imx:])))
+        riseBin = int(imx+np.round(riseTime))
+    except:
+        print('interpolation failed')
+        riseTime = np.NAN
+        riseBin = np.NAN
+    return riseBin, -a[imx]
+
+def find_rise(a,frac=0.5):
+    a = a -np.max(a)
+    imx = np.argmin(a)
+    print('imx',imx)
+    try:
+        riseTime = np.interp(frac*a[imx],a[imx:],np.arange(len(a[imx:])))
+        riseBin = int(imx+np.round(riseTime))
     except:
         print('interpolation failed')
         riseTime = np.NAN

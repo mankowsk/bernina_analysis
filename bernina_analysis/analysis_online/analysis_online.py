@@ -19,7 +19,7 @@ from ..utilities.utilities import find_fall, find_rise
 
 
 class TtProcessor:
-    def __init__(self,Nshots = 100, memory=300, step_type='data', direction='rising', step_width=200, save=False, savedir = '/gpfs/photonics/swissfel/res/bernina-staff/p19125/drift_data/bsen/'):
+    def __init__(self,Nshots = 200, memory=300, step_type='data', direction='rising', step_width=200, save=False, savedir = '/gpfs/photonics/swissfel/res/bernina-staff/p19125/drift_data/bsen/', smooth = 80):
         """
         Nshots:     number of shots acquired before each evaluation
         step_type:  'data' or 'erf'
@@ -28,6 +28,7 @@ class TtProcessor:
         #self.feedback = PV('', auto_monitor=True)
         self.Nshots = Nshots
         self.roi=None
+        self.smooth=smooth
         self.save = save
         self.savedir = savedir
         self.memory = memory
@@ -94,9 +95,9 @@ class TtProcessor:
                     counter = 0
                     self.evaluate()
                     continue
-    def analyse_edge_correlation_noea(self, tt_sig, ids, ratio_av=None, roi=[650,1350]):
-        tt_sig['off_sm'] = scipy.ndimage.uniform_filter(tt_sig['off'], size=(10,10))
-        tt_sig['on_sm'] = scipy.ndimage.uniform_filter(tt_sig['on'], size=(1,10))
+    def analyse_edge_correlation_noea(self, tt_sig, ids, ratio_av=None, roi=[650,1350], smooth=80):
+        tt_sig['off_sm'] = scipy.ndimage.uniform_filter(tt_sig['off'], size=(10,smooth))
+        tt_sig['on_sm'] = scipy.ndimage.uniform_filter(tt_sig['on'], size=(1,smooth))
         idx = np.digitize(ids['on'], ids['off'][:-1]-0.5)
         tt_ratio_sm = tt_sig['on_sm']/tt_sig['off_sm'][idx]-1
         corr = scipy.ndimage.correlate1d(tt_ratio_sm, ratio_av[roi[0]:roi[1]], axis=1)
@@ -141,7 +142,7 @@ class TtProcessor:
                 if self.direction == 'falling':
                     self.ratio_av = -self.ratio_av
 
-        corr_pos, corr_amp, tt_ratio_sm = self.analyse_edge_correlation_noea(tt_sig, ids, ratio_av=self.ratio_av, roi=self.roi)
+        corr_pos, corr_amp, tt_ratio_sm = self.analyse_edge_correlation_noea(tt_sig, ids, ratio_av=self.ratio_av, roi=self.roi, smooth=self.smooth)
         self.tt_ratio_sm = tt_ratio_sm
 
         self.pid.append(ids['on'])
@@ -236,7 +237,7 @@ class TtProcessor:
         # self.fig.clf()
         # self.ax = self.fig.add_subplot(111)
         if animate:
-            self.ani = FuncAnimation(self.fig,self.update_plot, interval=1000)
+            self.ani = FuncAnimation(self.fig,self.update_plot, interval=self.Nshots*10)
             #plt.show()
 
 

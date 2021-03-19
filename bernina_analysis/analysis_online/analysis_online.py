@@ -109,17 +109,11 @@ class TtProcessor:
         corr_amp = np.max(corr.data, axis=1)
         corr_pos = np.argmax(corr.data, axis=1)
         return corr_pos, corr_amp, tt_ratio_sm
+
     def take_pumped_background(self):
-        self._take_bg = True
-    def _take_pumped_background(self):
-        tt_sig, ids = on_off([self.tt_sig, self.ids], self.evts)
-        tt_sig['off_sm'] = scipy.ndimage.uniform_filter(tt_sig['off'], size=(10,self.smooth))
-        tt_sig['on_sm'] = scipy.ndimage.uniform_filter(tt_sig['on'], size=(1,self.smooth))
-        idx = np.digitize(ids['on'], ids['off'][:-1]-0.5)
-        tt_ratio_sm = tt_sig['on_sm']/tt_sig['off_sm'][idx]-1
-        self.tt_pumped = np.mean(tt_ratio_sm, axis=0)
+        self.tt_pumped = np.mean(self.tt_ratio_sm, axis=0)
         self.tt_pumped = self.tt_pumped/np.max(abs(self.tt_pumped))
-        self.roi = [find_rise(abs(self.tt_pumped),0.1), find_fall(abs(self.tt_pumped),0.1)]
+        self.roi = [len(self.tt_pumped)-find_fall(abs(self.tt_pumped),0.2)[0], find_fall(abs(self.tt_pumped),0.2)[0]]
 
     def evaluate(self):
 

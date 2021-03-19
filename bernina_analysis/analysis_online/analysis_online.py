@@ -10,7 +10,7 @@ from time import sleep
 from epics import PV
 import os
 from ..utilities.utilities import on_off, find_fall, find_rise, erf_edge, refine_reference
-
+from epics import PV
 
 
 
@@ -18,14 +18,25 @@ from ..utilities.utilities import on_off, find_fall, find_rise, erf_edge, refine
 
 
 class TtProcessor:
-    def __init__(self,cam = 'CAMS142-M5', Nshots = 200, memory=300, step_type='data', direction='rising', step_width=200, smooth = 80, roi=[None,None], save=False, savedir = '/gpfs/photonics/swissfel/res/bernina-staff/p19125/drift_data/bsen/'):
+    def __init__(self,cam = 'M5', fsppx=-1, Nshots = 200, memory=300, step_type='data', direction='rising', step_width=200, smooth = 80, roi=[None,None], save=False, savedir = '/gpfs/photonics/swissfel/res/bernina-staff/p19125/drift_data/bsen/'):
         """
         Nshots:     number of shots acquired before each evaluation
         step_type:  'data' or 'erf'
         direction:  'falling' or 'rising'. 
             'data', the first 100 evaluation is used to extract the reference from the data after finding positions with an erf function."""
         #self.feedback = PV('', auto_monitor=True)
-        self.cam=cam
+        self.djpv = None
+        if cam = 'M5':
+            try:
+                self.djpv = PV('SLAAR21-GEN:SPECTT')
+            except:
+                print('Issue with connecting to DJ pv')
+        elif cam = 'M1':
+            try:
+                self.djpv = PV('SLAAR21-GEN:SPATTT')
+            except:
+                print('Issue with connecting to DJ pv')        self.cam=cam
+        self.fsppx = fsppx
         self.Nshots = Nshots
         self.roi=roi
         self.edge_roi=None
@@ -50,7 +61,6 @@ class TtProcessor:
         self.ids = np.ndarray((Nshots))
         self.edge = None
         self.tt_pumped = None
-        self._take_bg = False
         self.fig = None
         self._running = True
         self.verbose = 0
@@ -97,9 +107,6 @@ class TtProcessor:
                 if counter == self.Nshots:
                     counter = 0
                     self.evaluate()
-                    if self._take_bg:
-                        self._take_pumped_background()
-                        self._take_bg = False
                     continue
     def analyse_edge_correlation_noea(self, tt_sig, ids, edge=None, roi=[650,1350], smooth=80):
         tt_sig['off_sm'] = scipy.ndimage.uniform_filter(tt_sig['off'], size=(10,smooth))
@@ -127,6 +134,12 @@ class TtProcessor:
             print(self.tt_sig[:10,25])
 
         tt_sig, ids = on_off([self.tt_sig[:,self.roi[0]:self.roi[1]], self.ids], self.evts)
+        if len(ids['off']) == 0:
+            print('No Delayed Shots')
+            return
+        elif len(ids['on']) == 0:
+            print('No Pumped shots')
+            return
         if self.counter_glob ==0:
             self.pid_1 = ids['on'][0]
         if self.edge is None:
@@ -170,6 +183,8 @@ class TtProcessor:
         self.corr_amp_av.append(np.median(corr_amp))
         self.corr_amp_av_std.append(np.std(corr_amp))
         self.counter_glob = self.counter_glob +1
+        if self.djpv is not None:
+            self.djpv.put(corr_pos_av*self.fsppx)
         if self.counter_glob ==self.memory:
             self.pid_2 = ids['on'][-1]
             self.counter_glob = 0

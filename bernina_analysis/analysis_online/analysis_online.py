@@ -145,7 +145,7 @@ class TtProcessor:
                     cen = self.step_width
                 elif len(yr)-cen < self.step_width:
                     cen = len(yr)- self.step_width
-                yr = yr[int(cen-self.width/2):int(cen+self.width/2)]
+                yr = yr[int(cen-self.step_width/2):int(cen+self.step_width/2)]
                 self.edge_roi = [None,None]
                 self.edge=yr
 

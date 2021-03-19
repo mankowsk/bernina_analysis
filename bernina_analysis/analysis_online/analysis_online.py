@@ -9,8 +9,7 @@ from threading import Thread
 from time import sleep
 from epics import PV
 import os
-from ..utilities.utilities import on_off
-from ..utilities.utilities import find_fall, find_rise
+from ..utilities.utilities import on_off, find_fall, find_rise, erf_edge, refine_reference
 
 
 
@@ -19,15 +18,16 @@ from ..utilities.utilities import find_fall, find_rise
 
 
 class TtProcessor:
-    def __init__(self,Nshots = 200, memory=300, step_type='data', direction='rising', step_width=200, save=False, savedir = '/gpfs/photonics/swissfel/res/bernina-staff/p19125/drift_data/bsen/', smooth = 80):
+    def __init__(self,Nshots = 200, memory=300, step_type='data', direction='rising', step_width=200, smooth = 80, roi=[None,None] save=False, savedir = '/gpfs/photonics/swissfel/res/bernina-staff/p19125/drift_data/bsen/'):
         """
         Nshots:     number of shots acquired before each evaluation
         step_type:  'data' or 'erf'
         direction:  'falling' or 'rising'. 
-            'data', the first 100 evaluation is used to extract the reference from the data."""
+            'data', the first 100 evaluation is used to extract the reference from the data after finding positions with an erf function."""
         #self.feedback = PV('', auto_monitor=True)
         self.Nshots = Nshots
-        self.roi=None
+        self.roi=roi
+        self.edge_roi=None
         self.smooth=smooth
         self.save = save
         self.savedir = savedir
@@ -47,7 +47,8 @@ class TtProcessor:
         self.tt_ratio_sm = None
         self.evts = np.ndarray((Nshots))
         self.ids = np.ndarray((Nshots))
-        self.ratio_av = None
+        self.edge = None
+        self.tt_pumped = None
         self.fig = None
         self._running = True
         self.verbose = 0
@@ -95,15 +96,24 @@ class TtProcessor:
                     counter = 0
                     self.evaluate()
                     continue
-    def analyse_edge_correlation_noea(self, tt_sig, ids, ratio_av=None, roi=[650,1350], smooth=80):
+    def analyse_edge_correlation_noea(self, tt_sig, ids, edge=None, roi=[650,1350], smooth=80):
         tt_sig['off_sm'] = scipy.ndimage.uniform_filter(tt_sig['off'], size=(10,smooth))
         tt_sig['on_sm'] = scipy.ndimage.uniform_filter(tt_sig['on'], size=(1,smooth))
         idx = np.digitize(ids['on'], ids['off'][:-1]-0.5)
         tt_ratio_sm = tt_sig['on_sm']/tt_sig['off_sm'][idx]-1
-        corr = scipy.ndimage.correlate1d(tt_ratio_sm, ratio_av[roi[0]:roi[1]], axis=1)
+        corr = scipy.ndimage.correlate1d(tt_ratio_sm, edge[roi[0]:roi[1]], axis=1)
         corr_amp = np.max(corr.data, axis=1)
         corr_pos = np.argmax(corr.data, axis=1)
         return corr_pos, corr_amp, tt_ratio_sm
+
+    def take_pumped_background(self):
+        tt_sig['off_sm'] = scipy.ndimage.uniform_filter(tt_sig['off'], size=(10,smooth))
+        tt_sig['on_sm'] = scipy.ndimage.uniform_filter(tt_sig['on'], size=(1,smooth))
+        idx = np.digitize(ids['on'], ids['off'][:-1]-0.5)
+        tt_ratio_sm = tt_sig['on_sm']/tt_sig['off_sm'][idx]-1
+        self.tt_pumped = np.mean(tt_ratio_sm, axis=0)
+        self.tt_pumped = self.tt_pumped/np.max(abs(self.tt_pumped))
+        self.roi = [find_rise(abs(self.tt_pumped),0.1), find_fall(abs(self.tt_pumped),0.1)]
 
     def evaluate(self):
 
@@ -115,34 +125,38 @@ class TtProcessor:
             print(f'tt_sig {self.tt_sig.shape}')
             print(self.tt_sig[:10,25])
 
-        tt_sig, ids = on_off([self.tt_sig, self.ids], self.evts)
+        tt_sig, ids = on_off([self.tt_sig[:,self.roi[0]:self.roi[1]], self.ids], self.evts)
         if self.counter_glob ==0:
             self.pid_1 = ids['on'][0]
-        if self.ratio_av is None:
+        if self.edge is None:
             if self.step_type == 'data':
-                if len(ids['off'])==0:
-                    print("No delayed shots")
-                tt_sig['off_sm'] = scipy.ndimage.uniform_filter(tt_sig['off'], size=(10,10))
-                tt_sig['on_sm'] = scipy.ndimage.uniform_filter(tt_sig['on'], size=(1,10))
-                self.ratio_av=np.mean(tt_sig['on_sm'][:100],axis=0)/np.mean(tt_sig['off_sm'][:100],axis=0)-1
+                pts = len(self.tt_sig[-1])
+                self.edge = erf_edge(pts, self.step_width)
+                self.edge_roi = [int(pts/2-self.step_width/2), int(pts/2+self.step_width/2)]
                 if self.direction == 'falling':
-                    cen, amp = find_fall(self.ratio_av)
-                else:
-                    cen, amp = find_rise(self.ratio_av)
+                    self.edge = -self.edge
+                corr_pos, corr_amp, tt_ratio_sm = self.analyse_edge_correlation_noea(tt_sig, ids, edge=self.edge, roi=self.edge_roi, smooth=self.smooth)
+                xr, yr = refine_reference(tt_ratio_sm,corr_pos,resolution=1)
+                if self.direction == 'rising':
+                    cen, amp = find_rise(yr)
+                elif self.direction == 'falling':
+                    cen, amp = ba.utilities.find_fall(yr)
                 if cen < self.step_width:
                     cen = self.step_width
-                elif len(self.ratio_av)-cen < self.step_width:
-                    cen = len(self.ratio_av)- self.step_width
-                self.roi = [int(cen-self.step_width/2), int(cen+self.step_width/2)]
+                elif len(self.yr)-cen < self.step_width:
+                    cen = len(self.yr)- self.step_width
+                yr = yr[int(cen-width/2):int(cen+width/2)]
+                self.edge_roi = [None,None]
+                self.edge=yr
 
             elif self.step_type == 'erf':
                 pts = len(self.tt_sig[-1])
-                self.ratio_av = scipy.special.erf(np.linspace(start=-pts*2/self.step_width, stop=pts*2/self.step_width, num=pts))
-                self.roi = [int(pts/2-self.step_width/2), int(pts/2+self.step_width/2)]
+                self.edge = erf_edge(pts, self.step_width)
+                self.edge_roi = [int(pts/2-self.step_width/2), int(pts/2+self.step_width/2)]
                 if self.direction == 'falling':
-                    self.ratio_av = -self.ratio_av
+                    self.edge = -self.edge
 
-        corr_pos, corr_amp, tt_ratio_sm = self.analyse_edge_correlation_noea(tt_sig, ids, ratio_av=self.ratio_av, roi=self.roi, smooth=self.smooth)
+        corr_pos, corr_amp, tt_ratio_sm = self.analyse_edge_correlation_noea(tt_sig, ids, edge=self.edge, roi=self.edge_roi, smooth=self.smooth)
         self.tt_ratio_sm = tt_ratio_sm
 
         self.pid.append(ids['on'])
@@ -181,9 +195,9 @@ class TtProcessor:
         self.axs[0][0].legend(loc='upper right', frameon=False)
         self.axs[0][1].legend(loc='upper right', frameon=False)
 
-        self.axs[1][1].plot(self.ratio_av, color='royalblue')
-        self.axs[1][1].axvline(self.roi[0], color='black', linestyle='dashed', linewidth=1)
-        self.axs[1][1].axvline(self.roi[1], color='black', linestyle='dashed', linewidth=1)
+        self.axs[1][1].plot(self.edge, color='royalblue')
+        self.axs[1][1].axvline(self.edge_roi[0], color='black', linestyle='dashed', linewidth=1)
+        self.axs[1][1].axvline(self.edge_roi[1], color='black', linestyle='dashed', linewidth=1)
         self.axs[1][0].plot(self.tt_ratio_sm[-1], color='royalblue')
         self.axs[1][0].axvline(self.corr_pos[-1][-1], color='red', linestyle='dashed', linewidth=1)
         self.axs[1][0].set_ylabel(f'on/off')

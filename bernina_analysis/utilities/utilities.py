@@ -122,19 +122,42 @@ def find_rise(a,frac=0.5):
         riseBin = np.NAN
     return riseBin, -a[imx]
 
-def find_hm(a):
-    a = a-np.min(a)
-    imx = np.argmax(a)
-    print('imx',imx)
-    #print(imx, np.argmin(a[mxpts[0]:mxpts[1]]-bg)+mxpts[0])
-    try:
-        riseTime = np.interp(0.5*a[imx],a,np.arange(len(a)))
-        riseBin = np.round(riseTime)
-    except:
-        print('interpolation failed')
-        riseTime = np.NAN
-        riseBin = np.NAN
-    return riseBin, a[imx]
+def load_tt_data(runno, base_dir='/sf/bernina/config/exp/21a_trigo/res/scan_info/'):
+    """loads the tt data from a json file"""
+    json_dir = Path(f'{base_dir}')
+    json_file = list(json_dir.glob(f'run{runno:04d}*'))[0].as_posix()
+    data = esc.parse_scan(json_file)
+    info = sf.readScanEcoJson_v01(json_file)
+    pos = np.squeeze(info[0]['scan_values'])
+    return pos, data
 
+def prep_tt_data(data, pid_offset=0):
+    """takes the data after parsing with load_tt_data, matched pids and sorts in on and off for analysis"""
+    tt_sig = data['SARES20-CAMS142-M5.roi_signal_x_profile']
+    i0 = (data['SLAAR21-LSCP1-FNS:CH4:VAL_GET']+data['SLAAR21-LSCP1-FNS:CH5:VAL_GET']+data['SLAAR21-LSCP1-FNS:CH6:VAL_GET']+data['SLAAR21-LSCP1-FNS:CH7:VAL_GET']).compute()
+    evts=data['SAR-CVME-TIFALL5:EvtSet'].compute()
+    tt_sig = mod_pid(tt_sig, pid_offset)
+    tt_sig, i0, evts = esc.match_arrays (tt_sig,i0,evts)    
+    i0, tt_sig = on_off([i0, tt_sig], evts)
+    return tt_sig, i0, evts
+
+def erf_edge(pts, step_width):
+    return scipy.special.erf(np.linspace(start=-pts*2/step_width, stop=pts*2/step_width, num=pts))
+
+def refine_reference(data,pos,resolution=1, width=200):
+    """refining the reference signal based on many example datasets (data) and given positions found before"""
+    xb = np.arange(len(data[0]))
+    xd = xb-np.asarray(pos).ravel()[:,None]
+    xd_mn = np.max(xd[:,0])
+    xd_mn -= xd_mn%resolution
+    xb_mn = xd_mn - resolution/2
+    xd_mx = np.min(xd[:,-1])
+    xd_mx += (resolution - xd_mx%resolution)
+    xb_mx = xd_mx + resolution/2
+    xr = np.arange(xd_mn,xd_mx+resolution,resolution)
+    xb = np.arange(xb_mn,xb_mx+resolution,resolution)
+    bns = np.digitize(xd,xb)
+    yr = np.bincount(bns.ravel(),weights=data.ravel())/np.bincount(bns.ravel())
+    return xr,yr
 
 ##########################################################################

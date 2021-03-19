@@ -18,13 +18,14 @@ from ..utilities.utilities import on_off, find_fall, find_rise, erf_edge, refine
 
 
 class TtProcessor:
-    def __init__(self,Nshots = 200, memory=300, step_type='data', direction='rising', step_width=200, smooth = 80, roi=[None,None], save=False, savedir = '/gpfs/photonics/swissfel/res/bernina-staff/p19125/drift_data/bsen/'):
+    def __init__(self,cam = M5, Nshots = 200, memory=300, step_type='data', direction='rising', step_width=200, smooth = 80, roi=[None,None], save=False, savedir = '/gpfs/photonics/swissfel/res/bernina-staff/p19125/drift_data/bsen/'):
         """
         Nshots:     number of shots acquired before each evaluation
         step_type:  'data' or 'erf'
         direction:  'falling' or 'rising'. 
             'data', the first 100 evaluation is used to extract the reference from the data after finding positions with an erf function."""
         #self.feedback = PV('', auto_monitor=True)
+        self.cam=cam
         self.Nshots = Nshots
         self.roi=roi
         self.edge_roi=None
@@ -65,14 +66,14 @@ class TtProcessor:
         self._running = False
 
     def run_continuously(self):
-        with source(channels=['SARES20-CAMS142-M5.roi_signal_x_profile','SAR-CVME-TIFALL5:EvtSet']) as s:
+        with source(channels=[f'SARES20-CAMS142-{self.cam}.roi_signal_x_profile','SAR-CVME-TIFALL5:EvtSet']) as s:
             counter = 0
             while self._running:
 
                 m = s.receive()
                 ix = m.data.pulse_id
 
-                prof = m.data.data['SARES20-CAMS142-M5.roi_signal_x_profile'].value
+                prof = m.data.data[f'SARES20-CAMS142-{self.cam}.roi_signal_x_profile'].value
                 if prof is None:
                     continue
                 evt = m.data.data['SAR-CVME-TIFALL5:EvtSet'].value
@@ -179,7 +180,8 @@ class TtProcessor:
 
     def setup_plot(self):
         plt.ion()
-        self.fig,self.axs = plt.subplots(2,2,num="BSEN drift monitor")
+        self.fig,self.axs = plt.subplots(2,2,num=f"BSEN drift monitor cam {self.cam}")
+        fig.suptitle(f'Camera {self.cam}')
         self.axs[0][0].set_title('Edge position')
         self.axs[0][1].set_title('Corr amplitude')
         self.axs[1][0].set_title('Last ratio')

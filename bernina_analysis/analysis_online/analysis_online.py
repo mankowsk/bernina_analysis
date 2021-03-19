@@ -108,8 +108,8 @@ class TtProcessor:
 
     def take_pumped_background(self):
         tt_sig, ids = on_off([self.tt_sig, self.ids], self.evts)
-        tt_sig['off_sm'] = scipy.ndimage.uniform_filter(tt_sig['off'], size=(10,smooth=self.smooth))
-        tt_sig['on_sm'] = scipy.ndimage.uniform_filter(tt_sig['on'], size=(1,smooth=self.smooth))
+        tt_sig['off_sm'] = scipy.ndimage.uniform_filter(tt_sig['off'], size=(10,self.smooth))
+        tt_sig['on_sm'] = scipy.ndimage.uniform_filter(tt_sig['on'], size=(1,self.smooth))
         idx = np.digitize(ids['on'], ids['off'][:-1]-0.5)
         tt_ratio_sm = tt_sig['on_sm']/tt_sig['off_sm'][idx]-1
         self.tt_pumped = np.mean(tt_ratio_sm, axis=0)

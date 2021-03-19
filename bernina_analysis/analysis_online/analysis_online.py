@@ -107,6 +107,7 @@ class TtProcessor:
         return corr_pos, corr_amp, tt_ratio_sm
 
     def take_pumped_background(self):
+        tt_sig, ids = on_off([self.tt_sig[:,self.roi[0]:self.roi[1]], self.ids], self.evts)
         tt_sig['off_sm'] = scipy.ndimage.uniform_filter(tt_sig['off'], size=(10,smooth))
         tt_sig['on_sm'] = scipy.ndimage.uniform_filter(tt_sig['on'], size=(1,smooth))
         idx = np.digitize(ids['on'], ids['off'][:-1]-0.5)
@@ -145,7 +146,7 @@ class TtProcessor:
                     cen = self.step_width
                 elif len(self.yr)-cen < self.step_width:
                     cen = len(self.yr)- self.step_width
-                yr = yr[int(cen-width/2):int(cen+width/2)]
+                yr = yr[int(cen-self.width/2):int(cen+self.width/2)]
                 self.edge_roi = [None,None]
                 self.edge=yr
 

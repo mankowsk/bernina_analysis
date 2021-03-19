@@ -35,7 +35,8 @@ class TtProcessor:
             try:
                 self.djpv = PV('SLAAR21-GEN:SPATTT')
             except:
-                print('Issue with connecting to DJ pv')        self.cam=cam
+                print('Issue with connecting to DJ pv')        
+        self.cam=cam
         self.fsppx = fsppx
         self.Nshots = Nshots
         self.roi=roi

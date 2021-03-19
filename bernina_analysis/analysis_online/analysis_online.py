@@ -26,12 +26,12 @@ class TtProcessor:
             'data', the first 100 evaluation is used to extract the reference from the data after finding positions with an erf function."""
         #self.feedback = PV('', auto_monitor=True)
         self.djpv = None
-        if cam = 'M5':
+        if cam == 'M5':
             try:
                 self.djpv = PV('SLAAR21-GEN:SPECTT')
             except:
                 print('Issue with connecting to DJ pv')
-        elif cam = 'M1':
+        elif cam == 'M1':
             try:
                 self.djpv = PV('SLAAR21-GEN:SPATTT')
             except:

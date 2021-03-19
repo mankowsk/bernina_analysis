@@ -143,8 +143,8 @@ class TtProcessor:
                     cen, amp = ba.utilities.find_fall(yr)
                 if cen < self.step_width:
                     cen = self.step_width
-                elif len(self.yr)-cen < self.step_width:
-                    cen = len(self.yr)- self.step_width
+                elif len(yr)-cen < self.step_width:
+                    cen = len(yr)- self.step_width
                 yr = yr[int(cen-self.width/2):int(cen+self.width/2)]
                 self.edge_roi = [None,None]
                 self.edge=yr

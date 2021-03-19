@@ -49,6 +49,7 @@ class TtProcessor:
         self.ids = np.ndarray((Nshots))
         self.edge = None
         self.tt_pumped = None
+        self._take_bg = False
         self.fig = None
         self._running = True
         self.verbose = 0
@@ -95,6 +96,9 @@ class TtProcessor:
                 if counter == self.Nshots:
                     counter = 0
                     self.evaluate()
+                    if self._take_bg:
+                        self._take_pumped_background()
+                        self._take_bg = False
                     continue
     def analyse_edge_correlation_noea(self, tt_sig, ids, edge=None, roi=[650,1350], smooth=80):
         tt_sig['off_sm'] = scipy.ndimage.uniform_filter(tt_sig['off'], size=(10,smooth))
@@ -105,8 +109,9 @@ class TtProcessor:
         corr_amp = np.max(corr.data, axis=1)
         corr_pos = np.argmax(corr.data, axis=1)
         return corr_pos, corr_amp, tt_ratio_sm
-
     def take_pumped_background(self):
+        self._take_bg = True
+    def _take_pumped_background(self):
         tt_sig, ids = on_off([self.tt_sig, self.ids], self.evts)
         tt_sig['off_sm'] = scipy.ndimage.uniform_filter(tt_sig['off'], size=(10,self.smooth))
         tt_sig['on_sm'] = scipy.ndimage.uniform_filter(tt_sig['on'], size=(1,self.smooth))

@@ -113,7 +113,7 @@ class TtProcessor:
     def take_pumped_background(self):
         self.tt_pumped = np.mean(self.tt_ratio_sm, axis=0)
         self.tt_pumped = self.tt_pumped/np.max(abs(self.tt_pumped))
-        self.roi = [len(self.tt_pumped)-find_fall(abs(self.tt_pumped),0.2)[0], find_fall(abs(self.tt_pumped),0.2)[0]]
+        self.roi = [len(self.tt_pumped)-find_fall(abs(self.tt_pumped[::-1]),0.2)[0], find_fall(abs(self.tt_pumped),0.2)[0]]
 
     def evaluate(self):
 

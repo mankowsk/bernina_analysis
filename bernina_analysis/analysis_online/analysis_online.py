@@ -18,7 +18,7 @@ from ..utilities.utilities import on_off, find_fall, find_rise, erf_edge, refine
 
 
 class TtProcessor:
-    def __init__(self,cam = 'M5', Nshots = 200, memory=300, step_type='data', direction='rising', step_width=200, smooth = 80, roi=[None,None], save=False, savedir = '/gpfs/photonics/swissfel/res/bernina-staff/p19125/drift_data/bsen/'):
+    def __init__(self,cam = 'CAMS142-M5', Nshots = 200, memory=300, step_type='data', direction='rising', step_width=200, smooth = 80, roi=[None,None], save=False, savedir = '/gpfs/photonics/swissfel/res/bernina-staff/p19125/drift_data/bsen/'):
         """
         Nshots:     number of shots acquired before each evaluation
         step_type:  'data' or 'erf'
@@ -181,7 +181,7 @@ class TtProcessor:
     def setup_plot(self):
         plt.ion()
         self.fig,self.axs = plt.subplots(2,2,num=f"BSEN drift monitor cam {self.cam}")
-        fig.suptitle(f'Camera {self.cam}')
+        self.fig.suptitle(f'Camera {self.cam}')
         self.axs[0][0].set_title('Edge position')
         self.axs[0][1].set_title('Corr amplitude')
         self.axs[1][0].set_title('Last ratio')

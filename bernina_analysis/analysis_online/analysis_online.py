@@ -18,7 +18,7 @@ from ..utilities.utilities import on_off, find_fall, find_rise, erf_edge, refine
 
 
 class TtProcessor:
-    def __init__(self,cam = M5, Nshots = 200, memory=300, step_type='data', direction='rising', step_width=200, smooth = 80, roi=[None,None], save=False, savedir = '/gpfs/photonics/swissfel/res/bernina-staff/p19125/drift_data/bsen/'):
+    def __init__(self,cam = 'M5', Nshots = 200, memory=300, step_type='data', direction='rising', step_width=200, smooth = 80, roi=[None,None], save=False, savedir = '/gpfs/photonics/swissfel/res/bernina-staff/p19125/drift_data/bsen/'):
         """
         Nshots:     number of shots acquired before each evaluation
         step_type:  'data' or 'erf'

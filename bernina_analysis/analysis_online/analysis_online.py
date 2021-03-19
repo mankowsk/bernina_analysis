@@ -107,9 +107,9 @@ class TtProcessor:
         return corr_pos, corr_amp, tt_ratio_sm
 
     def take_pumped_background(self):
-        tt_sig, ids = on_off([self.tt_sig[:,self.roi[0]:self.roi[1]], self.ids], self.evts)
-        tt_sig['off_sm'] = scipy.ndimage.uniform_filter(tt_sig['off'], size=(10,smooth))
-        tt_sig['on_sm'] = scipy.ndimage.uniform_filter(tt_sig['on'], size=(1,smooth))
+        tt_sig, ids = on_off([self.tt_sig, self.ids], self.evts)
+        tt_sig['off_sm'] = scipy.ndimage.uniform_filter(tt_sig['off'], size=(10,smooth=self.smooth))
+        tt_sig['on_sm'] = scipy.ndimage.uniform_filter(tt_sig['on'], size=(1,smooth=self.smooth))
         idx = np.digitize(ids['on'], ids['off'][:-1]-0.5)
         tt_ratio_sm = tt_sig['on_sm']/tt_sig['off_sm'][idx]-1
         self.tt_pumped = np.mean(tt_ratio_sm, axis=0)
@@ -158,6 +158,8 @@ class TtProcessor:
                     self.edge = -self.edge
 
         corr_pos, corr_amp, tt_ratio_sm = self.analyse_edge_correlation_noea(tt_sig, ids, edge=self.edge, roi=self.edge_roi, smooth=self.smooth)
+        if self.tt_pumped is not None:
+            tt_ratio_sm = tt_ratio_sm/self.tt_pumped[None,self.roi[0]:self.roi[1]]
         self.tt_ratio_sm = tt_ratio_sm
 
         self.pid.append(ids['on'])

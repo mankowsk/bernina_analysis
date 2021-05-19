@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import dask.array as da
 import json
-import os 
+import os
 import logging
 from pathlib import Path
 import sys
@@ -33,21 +33,21 @@ def loaddata(f):
 
 def analyse_filter(runno, filters={'i0_sum':[0,700]}, sig = ['jf_pk'], i0 = ['jf_fl'], plot_hist = False, plot = True, save=False, noimg=True):
     datas, evts, filt, filt_ea, filt_ratio = apply_filter(runno, filters=filters, sig=sig, plot_hist=plot_hist, noimg=noimg)
-    
+
     xname = list(evts.scan.parameter)[1]
     xrbname = list(evts.scan.parameter)[2]
     xset = evts.scan.parameter[xname]['values']
     xrb = evts.scan.parameter[xrbname]['values']
-    
+
     # filter data
     datas_filt = {key: {ll: value[ll][filt[ll]] for ll in ['on', 'off']} for key, value in datas.items()}
-    
+
     # create x axis from remaining steps
     first_jf = [key for key in datas_filt.keys() if 'jf' in key][0]
-   
+
     xset_filt = np.array([step for step in datas_filt[first_jf]['off'].scan.parameter[xname]['values'] if step in datas_filt[first_jf]['on'].scan.parameter[xname]['values'] ])
     xrb_filt = np.array([step for step in datas_filt[first_jf]['off'].scan.parameter[xrbname]['values'] if step in datas_filt[first_jf]['on'].scan.parameter[xrbname]['values'] ])
-    
+
     exclude = ['CH', 'tt']
     if noimg:
         exclude = exclude + ['img']
@@ -55,15 +55,15 @@ def analyse_filter(runno, filters={'i0_sum':[0,700]}, sig = ['jf_pk'], i0 = ['jf
     # average step data
     datas_av = {key: {ll: np.array([np.nansum(step.data,axis=0) for step in value[ll].scan]) for ll in ['on', 'off']} for key, value in datas.items() if not np.any([ch in key for ch in exclude])}
     datas_filt_av = {key: {ll: np.array([np.nansum(step.data,axis=0) for step, step_pos in zip(value[ll].scan, value[ll].scan.parameter[xname]['values']) if step_pos in xset_filt ]) for ll in ['on', 'off']} for key, value in datas_filt.items() if not np.any([ch in key for ch in exclude])}
-    
-    
+
+
     if plot:
         i0ch = i0[0]
         jfs = {key:value for key, value in datas_av.items() if 'jf' in key}
         jfs_filt = {key:value for key, value in datas_filt_av.items() if 'jf' in key}
-        
+
         fig, ax = plt.subplots(len(jfs.keys()),2, figsize=(8,2.5*len(jfs.keys())))
-        
+
         for n, ((jf, jfd), (jf_filt, jfd_filt)) in enumerate(zip(jfs.items(), jfs_filt.items())):
             if 'img' in jf:
                 jfd['on']=np.nansum(jfd['on'], axis=(1,2))
@@ -84,7 +84,7 @@ def analyse_filter(runno, filters={'i0_sum':[0,700]}, sig = ['jf_pk'], i0 = ['jf
             ax[n][1].plot(xset_filt, (jfd_filt['on']/datas_filt_av[i0ch]['on']), 'blue', label=f'{jf_filt} filtered on')
             ax[n][1].plot(xset_filt, (jfd_filt['off']/datas_filt_av[i0ch]['off']), 'red', label=f'{jf_filt} filtered')
         fig.tight_layout()
-    
+
     datas_av.update({
         'xset': xset,
         'xrb': xrb,
@@ -114,21 +114,21 @@ def apply_filter(runno, filters={'i0_sum':[0,700]}, sig = ['jf_pk'], plot_hist =
         jfs = {f'jf_{key[13:]}':data[key] for key in data.keys() if 'JF' in key and 'img' not in key}
     else:
         jfs = {f'jf_{key[13:]}':data[key] for key in data.keys() if 'JF' in key}
-    evts = data[ 'SAR-CVME-TIFALL5:EvtSet'].compute() 
+    evts = data[ 'SAR-CVME-TIFALL5:EvtSet'].compute()
     i0s = {f'i0_{key[18:21]}':correct_ioxos_shape(data[key]) for key in data.keys() if 'SLAAR21-LSCP1-FNS:' in key}
     if tt:
         tt_chs = {'tt_sig': mod_pid(data['SARES20-CAMS142-M5.roi_signal_x_profile'],pid_offset)}
     else:
         tt_chs = {}
     datas = {**jfs, **i0s, **tt_chs}
-    
+
     # add the sum of the i0 diodes
     datas['i0_sum'] = datas['i0_CH4']+datas['i0_CH5']+datas['i0_CH6']+datas['i0_CH7']
     datas.update(calc_i0_pos_ea(*esc.match_arrays(datas['i0_CH4'],datas['i0_CH5'],datas['i0_CH6'],datas['i0_CH7'])))
-    
+
     # compute arrays used for filter
     datas.update({ch : val.compute() for ch, val in datas.items() if not np.any([tt_ch in ch for tt_ch in tt_chs.keys()]) })
-    
+
     # match arrays, compute, sort in on and off
     datas = {ch: val for ch, val in zip(datas.keys(), on_off(esc.match_arrays(*[ea for ea in datas.values()]),evts))}
 
@@ -157,13 +157,13 @@ def apply_filter(runno, filters={'i0_sum':[0,700]}, sig = ['jf_pk'], plot_hist =
 
         filt_ratio[las]=sum(mm)/len(mm)*100
         print(f'After filtering {sum(mm)/len(mm)*100}% of the {las} pulses remaining')
-    
+
     # plot histograms of the filters
     if plot_hist:
         plt.ion()
         fig, ax = plt.subplots(len(filters.keys()),2, figsize=(8,2.5*(len(filters.keys()))))
         for n, (k, th) in enumerate(filters.items()):
-            
+
             d_std = np.std(datas[k]['off'][(datas[k]['off'].data-np.median(datas[k]['off'].data))<2*np.std(datas[k]['off'].data)])
             d_med = np.median(datas[k]['off'].data)
             bins = np.linspace(d_med-4*d_std, d_med+4*d_std, 200)
@@ -186,18 +186,18 @@ def apply_filter(runno, filters={'i0_sum':[0,700]}, sig = ['jf_pk'], plot_hist =
             raise Exception("User not happy with filters")
     return datas, evts, filt, filt_ea, filt_ratio
 
-   
+
 
 def analyse_filter_timetool(
-    runno, 
-    save=False, 
-    calib= 1.9e-3, 
-    bin_size=None, 
-    overwrite_tt=False, 
-    sub_median=True, 
-    pid_offset=0, 
-    filters={'i0_sum':[0,700]}, sig = ['jf_pk'], i0 = ['jf_fl'], 
-    plot_hist = False, 
+    runno,
+    save=False,
+    calib= 1.9e-3,
+    bin_size=None,
+    overwrite_tt=False,
+    sub_median=True,
+    pid_offset=0,
+    filters={'i0_sum':[0,700]}, sig = ['jf_pk'], i0 = ['jf_fl'],
+    plot_hist = False,
     noimg=True,
     tt_offset=0,
     tt_amp_min=0,
@@ -206,10 +206,10 @@ def analyse_filter_timetool(
     tt_filename = f'small_data/run_{runno}_jitter.h5'
     datas, evts, filt, filt_ea, filt_ratio = apply_filter(runno, filters=filters, sig=sig, plot_hist=plot_hist, noimg=noimg, tt=True, pid_offset=pid_offset)
     data = loaddata(f'small_data/run_{runno}.h5')
-    
+
 
     # filter data
-    datas_filt = {key: {ll: value[ll][filt[ll]] for ll in ['on', 'off']} for key, value in datas.items()}    
+    datas_filt = {key: {ll: value[ll][filt[ll]] for ll in ['on', 'off']} for key, value in datas.items()}
     xname = list(evts.scan.parameter)[0]
     xrbname = list(evts.scan.parameter)[1]
     xset = np.array(evts.scan.parameter[xname]['values'])*1e12
@@ -219,7 +219,7 @@ def analyse_filter_timetool(
 
     xset_filt = np.array([step for step in datas_filt[first_jf]['off'].scan.parameter[xname]['values'] if step in datas_filt[first_jf]['on'].scan.parameter[xname]['values'] ])
     xrb_filt = np.array([step for step in datas_filt[first_jf]['off'].scan.parameter[xrbname]['values'] if step in datas_filt[first_jf]['on'].scan.parameter[xrbname]['values'] ])
-    
+
     exclude = ['CH', 'tt']
     if noimg:
         exclude = exclude + ['img']
@@ -273,12 +273,12 @@ def analyse_filter_timetool(
         print(f'max of jf_pk signal at idx {idx} at time {datas_av["xset"][idx]}')
 
     pos_corr = pos_all- edge_pos_ps
-    tt_bins = np.arange(np.nanmin(xset),np.nanmax(xset)-bin_size/2,bin_size)+bin_size/2 
+    tt_bins = np.arange(np.nanmin(xset),np.nanmax(xset)-bin_size/2,bin_size)+bin_size/2
     tt_pos = np.arange(np.nanmin(xset),np.nanmax(xset)+bin_size/2,bin_size)
 
 
-    ### bins need to be shorter by 1 and shifted by half a 
-    ### bin_size compared to the real time points as np.digitize 
+    ### bins need to be shorter by 1 and shifted by half a
+    ### bin_size compared to the real time points as np.digitize
     ### uses < bins[0] as '0' and > bins [-1] as last value
     on_pid = datas_filt['tt_sig']['on'].index
     off_pid = datas_filt['tt_sig']['off'].index
@@ -291,7 +291,7 @@ def analyse_filter_timetool(
     print('calculating tt binned average step data')
     datas_filt_av_tt = {key: {las: np.array([np.nansum(dat[las].data[(to_bin == i)],axis=0) for i in range(len(tt_pos))]) for las, to_bin in assigned_bin.items()} for key, dat in datas_filt.items() if not np.any([ch in key for ch in exclude])}
 
-    
+
     datas_filt_av_tt.update({
         'xset': tt_pos,
         'tt_poss' : edge_pos_ea.data,
@@ -300,7 +300,7 @@ def analyse_filter_timetool(
     })
 
 
-        
+
     datas_av.update({
         'xset': xset,
         'xrb': xrb,
@@ -321,8 +321,8 @@ def analyse_filter_timetool(
         print('saving')
         dsg.save(f'text_data/run_{runno}_filt_tt.h5', full_data)
         Path(f'text_data/run_{runno}_filt_tt.h5').chmod(0o775)
-        
-        
+
+
     return full_data
 
 
@@ -335,37 +335,37 @@ def correlation(runno):
     for k in list(data.keys()):
         if 'JFscatt_rois_' in k:
             rd[k]=[]
-            
+
     i0 = data['SLAAR21-LTIM01-EVR0:CALCI'].compute()
-    i0, Evts = esc.match_arrays (i0,Evts)    
+    i0, Evts = esc.match_arrays (i0,Evts)
     for arg in rd:
         rd[arg],Evts = esc.match_arrays (data[arg].compute(), Evts)
-        
-    
-    for arg in rd:    
+
+
+    for arg in rd:
         rd[arg] = on_off([rd[arg]], Evts)[0]
-        
+
     i0 = on_off([i0], Evts)
     rd.update({'i0': i0})
 
-        
+
     return rd
 
 
 def phiScan(runno, save=True, plot=False):
     data = loaddata(f'small_data/run_{runno}.h5')
     Evts=data['SAR-CVME-TIFALL5:EvtSet'].compute()
-    bg = data['JFscatt_rois_bg'] ;  
+    bg = data['JFscatt_rois_bg'] ;
     pk = data['JFscatt_rois_pk']
     fl = data['JFscatt_rois_fl']
     i0 = data['SLAAR21-LTIM01-EVR0:CALCI'].compute()
-    
+
     motor_name = list(pk.scan.parameter.keys())[1]
     pos = np.asarray(pk.scan.parameter[motor_name]['values'])
     pk, bg,fl, Evts = esc.match_arrays (pk, bg,fl,Evts)
     i0, pk, bg,fl = on_off([i0, pk, bg,fl], Evts)
-    
-    
+
+
     i0_av = dict(on=[], off=[])
     pk_av = dict(on=[], off=[])
     fl_av = dict(on=[], off=[])
@@ -375,24 +375,24 @@ def phiScan(runno, save=True, plot=False):
         i0_av[las] = np.array([np.nanmean(ei.data) for ei in i0[las].scan])
         fl_av[las] = np.array([np.nanmean(ei.data) for ei in fl[las].scan])
         pk_av[las] = np.array([np.nanmean(ei.data) for ei in pk[las].scan])
-        bg_av[las] = np.array([np.nanmean(ei.data) for ei in bg[las].scan]) 
-        
+        bg_av[las] = np.array([np.nanmean(ei.data) for ei in bg[las].scan])
+
 
     ra_pk = (pk_av['off'])
     ra_fl = (fl_av['off'])
     ra_bg = (bg_av['off'])
     ra_i0 = (i0_av['off'])
-    
+
     pk_on = (pk_av['on'] - bg_av['on'])/fl_av['on']
     pk_off = (pk_av['off'] - bg_av['off'])/fl_av['off']
     diff = pk_on /pk_off
-    
-    if save:        
+
+    if save:
         np.save(f'text_data/run_{runno}.npy',[pos,pk_on,pk_off,diff])
         Path(f'text_data/run_{runno}.npy').chmod(0o775)
-        
+
     if plot:
-        fig,ax = plt.subplots(1,2,num='Phi-Scan', figsize=(9,4))        
+        fig,ax = plt.subplots(1,2,num='Phi-Scan', figsize=(9,4))
         fig.suptitle(f'Run {runno}')
         ax[0].plot(pos,(pk_av['on'] - bg_av['on'])/fl_av['on'],label="on")
         ax[0].plot(pos,(pk_av['off'] - bg_av['off'])/fl_av['off'],label="off")
@@ -409,17 +409,17 @@ def phiScan(runno, save=True, plot=False):
 def phiScanI0pbps(runno, save=True, plot=False, what='diff', corr_by = 'fl'):
     data = loaddata(f'small_data/run_{runno}.h5')
     Evts=data['SAR-CVME-TIFALL5:EvtSet'].compute()
-    bg = data['JFscatt_rois_bg'] ;  
+    bg = data['JFscatt_rois_bg'] ;
     pk = data['JFscatt_rois_pk']
     fl = data['JFscatt_rois_fl']
     i0 = data['SLAAR21-LTIM01-EVR0:CALCI'].compute()
-    
+
     motor_name = list(pk.scan.parameter.keys())[1]
     pos = np.asarray(pk.scan.parameter[motor_name]['values'])
     i0, bg,fl, Evts = esc.match_arrays (i0, bg,fl,Evts)
     i0, pk, bg,fl = on_off([i0, pk, bg,fl], Evts)
-    
-    
+
+
     i0_av = dict(on=[], off=[])
     pk_av = dict(on=[], off=[])
     fl_av = dict(on=[], off=[])
@@ -429,43 +429,43 @@ def phiScanI0pbps(runno, save=True, plot=False, what='diff', corr_by = 'fl'):
         i0_av[las] = np.array([np.nanmean(ei.data) for ei in i0[las].scan])
         fl_av[las] = np.array([np.nanmean(ei.data) for ei in fl[las].scan])
         pk_av[las] = np.array([np.nanmean(ei.data) for ei in pk[las].scan])
-        bg_av[las] = np.array([np.nanmean(ei.data) for ei in bg[las].scan]) 
-        
+        bg_av[las] = np.array([np.nanmean(ei.data) for ei in bg[las].scan])
+
 
     ra_pk = (pk_av['off'])
     ra_fl = (fl_av['off'])
     ra_bg = (bg_av['off'])
     ra_i0 = (i0_av['off'])
-    
+
     if corr_by =='i0':
         pk_on = (pk_av['on'])/i0_av['on']
         pk_off = (pk_av['off'])/i0_av['off']
-        
+
     elif corr_by=='fl':
         pk_on = (pk_av['on'] )/fl_av['on']
-        pk_off = (pk_av['off'])/fl_av['off']     
-        
-        
+        pk_off = (pk_av['off'])/fl_av['off']
+
+
     if what=='diff':
         onoff = pk_on -pk_off
-    elif what == 'ratio': 
+    elif what == 'ratio':
         onoff = pk_on/pk_off
-    
-    elif what == 'on': 
+
+    elif what == 'on':
         onoff = pk_on
         #pk_off = np.zeros_like(pk_on)
-        
-    elif what == 'off': 
+
+    elif what == 'off':
         onoff = pk_off
         #pk_on = np.zeros_like(pk_off)
-            
-    
-    if save:        
+
+
+    if save:
         np.save(f'text_data/run_{runno}.npy',[pos,pk_on,pk_off,onoff])
         Path(f'text_data/run_{runno}.npy').chmod(0o775)
-        
+
     if plot:
-        fig,ax = plt.subplots(1,2,num=f'Phi-Scan {runno}', figsize=(9,4))        
+        fig,ax = plt.subplots(1,2,num=f'Phi-Scan {runno}', figsize=(9,4))
         fig.suptitle(f'Run {runno}')
         ax[0].plot(pos,pk_on,label="on")
         ax[0].plot(pos,pk_off,label="off")
@@ -480,38 +480,7 @@ def phiScanI0pbps(runno, save=True, plot=False, what='diff', corr_by = 'fl'):
 
 
 
-def do_fft(t,tr,lm=None,lx=None,plot=None,fname=None,pad=None):
 
-    if lm is not None and lx is not None: 
-        lm = np.argmin(abs(t-lm));   
-        lx = np.argmin(abs(t-lx))
-        tr=tr[lm:lx]
-        t=t[lm:lx]
-    if pad is not None:
-        N = t.size
-        te = t[1]-t[0]
-        t = np.arange(N+pad)*te+t[0]
-        trp = np.zeros(N+pad)
-        trp[:N]=tr
-        tr=trp
-
-    N = t.size
-    T = t[N-1]-t[0]
-    te = t[1]-t[0]
-    fe = 1.0/te
-    tfd=np.fft.fft(tr)/N
-    ampl =np.absolute(tfd)
-    freq=np.arange(N)*1.0/T
-    if plot:        
-       
-        fig,ax = plt.subplots(1,1,num='FFT')        
-        ax.plot(freq[1:300],ampl[1:300]*100,'-o',linewidth=2)
-        ax.set_xlabel("Frequency / THz")
-        ax.set_ylabel("Amplitude x 100")
-        ax.grid()
-        ax.legend(frameon=True)
-        ax.set_xlim(1,10)
-    return freq,ampl 
 
 
 def do_FFT_Time_Freq(t,tr,lm=None,lx=None,a0=100,sig=0.2,plot=True,clm=1):
@@ -524,7 +493,7 @@ def do_FFT_Time_Freq(t,tr,lm=None,lx=None,a0=100,sig=0.2,plot=True,clm=1):
         td_fft=np.dstack((td_fft,amp_fft))
     freq=do_fft(t,spec,lm,lx,plot=False)[0]
     td_fft=td_fft
-    
+
     x=t[0:900]; y=freq[50:200]; z=td_fft[0][50:200,0:900]
 #    plt.pcolor(t[10:600],freq[4:25],td_fft[0][4:25,10:600],vmin=-5,vmax=5)
     if plot is True:

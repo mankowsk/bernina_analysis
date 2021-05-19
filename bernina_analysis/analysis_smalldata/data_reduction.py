@@ -61,14 +61,13 @@ class Data_Reduction():
     def setup_data_handlers(self, scan_info):
         jf_handlers = {}
         for jf, jf_cfg in self.cfg['JFs'].items():
-            pedestal_file = self.cfg['Exp_config']['pedestal_file']+f".{jf_cfg['id']}.res.h5"
+            pedestal_file = self.cfg['Exp_config']['pedestal_file']
             gain_file = self.cfg['Exp_config']['gain_file']
             jf_file = [file for file in scan_info['scan_files'][0] if jf_cfg['id'] in file][0]
             jf_handlers[jf] = ju.EscapeAdapter(
                     file_path = jf_file, 
                     gain_file = gain_file, 
                     pedestal_file = pedestal_file,
-                    jf_id=jf_cfg['id']
                     )
         return jf_handlers
 
@@ -173,7 +172,7 @@ class Data_Reduction():
             jf = 'JFscatt'
         jf_cfg = self.cfg['JFs'][jf]
         pgroup = self.cfg['Exp_config']['pgroup']
-        pedestal_file = self.cfg['Exp_config']['pedestal_file']+f".{jf_cfg['id']}.res.h5"
+        pedestal_file = self.cfg['Exp_config']['pedestal_file']
 
         json_dir = Path(f'/sf/bernina/data/{pgroup}/res/scan_info/')
         print(json_dir)

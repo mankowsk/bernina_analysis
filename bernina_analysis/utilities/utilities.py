@@ -6,6 +6,7 @@ import escape.parse.swissfel as sf
 import h5py
 import escape as esc
 import scipy
+from pathlib import Path
 
 ### DATA CORRECTION AND MANIPULATION FUNCTIONS FOR ESCAPE ARRAYS ###
 def mod_pid(ea,n):
@@ -16,16 +17,16 @@ def mod_pid(ea,n):
     return esc.Array(data=data, index=index, step_lengths=step_lengths, parameter=parameter)
 
 def correct_ioxos_shape(ea):
-    return esc.Array(data=ea.data.T[0], index = ea.index, parameter = ea.scan.parameter, step_lengths = ea.scan.step_lengths) 
+    return esc.Array(data=ea.data.T[0], index = ea.index, parameter = ea.scan.parameter, step_lengths = ea.scan.step_lengths)
 
 def create_ea_from_data(ea, data):
-    return esc.Array(data=data, index = ea.index, parameter = ea.scan.parameter, step_lengths = ea.scan.step_lengths) 
+    return esc.Array(data=data, index = ea.index, parameter = ea.scan.parameter, step_lengths = ea.scan.step_lengths)
 
 def calc_i0_pos_ea(ch4, ch5, ch6, ch7):
     data_i0_x = 4.133*(ch4.data*0.001609-0.00139*ch5.data)/(ch4.data*0.00161+0.00139*ch5.data)
     data_i0_y =-3.997*(ch6.data*0.00208-0.00232*ch7.data)/(ch6.data*0.00208+0.00232*ch7.data)
-    i0_x = esc.Array(data=data_i0_x, index = ch4.index, parameter = ch4.scan.parameter, step_lengths = ch4.scan.step_lengths) 
-    i0_y = esc.Array(data=data_i0_y, index = ch4.index, parameter = ch4.scan.parameter, step_lengths = ch4.scan.step_lengths) 
+    i0_x = esc.Array(data=data_i0_x, index = ch4.index, parameter = ch4.scan.parameter, step_lengths = ch4.scan.step_lengths)
+    i0_y = esc.Array(data=data_i0_y, index = ch4.index, parameter = ch4.scan.parameter, step_lengths = ch4.scan.step_lengths)
     return {'i0_x': i0_x, 'i0_y': i0_y}
 
 def on_off(data,evt, compute=False,invert=False):
@@ -35,21 +36,27 @@ def on_off(data,evt, compute=False,invert=False):
     for ei, d in enumerate(data):
         data[ei] = dict(off = data[ei][laser_delayed] ,on = data[ei][~laser_delayed])
         if compute:
-            if ei == 0: 
+            if ei == 0:
                 data[ei].update({'Id_on': data[ei]['on'].index, 'Id_off': data[ei]['off'].index})
             for las in ['on','off']:
                 try:
                     data[ei][las] =  data[ei][las].data.compute()
                 except AttributeError:
-                    data[ei][las] =  data[ei][las].data             
+                    data[ei][las] =  data[ei][las].data
     return data
 
 ##########################################################################
 
 
-### TIMETOOL ANALYSIS SCRIPTS ###
+### TIMETOOL ANALYSIS AND DATA ANALYSIS SCRIPTS ###
 
-def analyse_edge_correlation(tt_sig, ratio_av=None, roi=[650,1350]):
+def refine_max(corr):
+    poly = np.array([np.polyfit(np.arange(-10,10),y[np.argmax(y)-10:np.argmax(y)+10], 5) for y in corr.data])
+    roots = np.array(  [np.roots(np.polyder(pol,1)) for pol in poly]  )
+    deltas = np.array(  [np.real(root[np.argmin(abs(root))]) for root in roots])
+    return deltas
+
+def analyse_edge_correlation(tt_sig, ratio_av=None, roi=[650,1350], debug = False):
     #"""tt_sig: dictionary with keys 'on' and 'off', which hold 1d escape arrays of timetool traces with and without overlapped laser and x-ray pulses. The script correlates an average of 100 edges with the individual shots and returns two escape arrays, holding the position of the edge in px and the amplitude of the correlation peak."""
     tt_sig['off_sm'] = tt_sig['off'].map_index_blocks(scipy.ndimage.uniform_filter, size=(10,10))
     tt_sig['on_sm'] = tt_sig['on'].map_index_blocks(scipy.ndimage.uniform_filter, size=(1,10))
@@ -59,19 +66,23 @@ def analyse_edge_correlation(tt_sig, ratio_av=None, roi=[650,1350]):
     corr = corr.compute()
     corr_amp = np.max(corr.data, axis=1)
     corr_pos = np.argmax(corr.data, axis=1)
+    deltas = refine_max(corr)
+    corr_pos = corr_pos + deltas
     corr_pos_ea = create_ea_from_data(ea=tt_sig['on'], data=corr_pos)
     corr_amp_ea = create_ea_from_data(ea=tt_sig['on'], data=corr_amp)
-    return corr_pos_ea, corr_amp_ea
+    if debug:
+        return corr_pos_ea, corr_amp_ea, tt_ratio_sm, ratio_av, corr
+    else:
+        return corr_pos_ea, corr_amp_ea
 
 def find_edge(data, step_length=50, edge_type='falling', step_type='heaviside', refinement=1, scale=10):
-    # refine datacurrent_ref_correction 
+    # refine datacurrent_ref_correction
     if data.ndim == 1:
         data = data[np.newaxis, :]
     def _interp(fp, xp, x):  # utility function to be used with apply_along_axis
         return np.interp(x, xp, fp)
     data_length = data.shape[1]
     refined_data = np.apply_along_axis(_interp, axis=1, arr=data, x=np.arange(0, data_length - 1, refinement),xp=np.arange(data_length),)
-                                                
     # prepare a step function and refine it
     if step_type == 'heaviside':
         step_waveform = np.ones(shape=(step_length,))
@@ -83,7 +94,7 @@ def find_edge(data, step_length=50, edge_type='falling', step_type='heaviside', 
         step_waveform = scipy.special.erf(np.arange(-step_length/2, step_length/2)/scale)
         if edge_type == 'falling':
             step_waveform *= -1
-    
+
     step_waveform = np.interp(x=np.arange(0, step_length - 1, refinement),xp=np.arange(step_length),fp=step_waveform,)
     # find edges
     xcorr = np.apply_along_axis(np.correlate, 1, refined_data, v=step_waveform, mode='valid')
@@ -126,18 +137,18 @@ def load_tt_data(runno, base_dir='/sf/bernina/config/exp/21a_trigo/res/scan_info
     """loads the tt data from a json file"""
     json_dir = Path(f'{base_dir}')
     json_file = list(json_dir.glob(f'run{runno:04d}*'))[0].as_posix()
-    data = esc.parse_scan(json_file)
+    data = esc.swissfel.parse_scan(json_file, exclude_from_files=['. .', 'JF', 'CAM'])
     info = sf.readScanEcoJson_v01(json_file)
     pos = np.squeeze(info[0]['scan_values'])
     return pos, data
 
-def prep_tt_data(data, pid_offset=0):
+def prep_tt_data(data, pid_offset=0, cam="M5"):
     """takes the data after parsing with load_tt_data, matched pids and sorts in on and off for analysis"""
-    tt_sig = data['SARES20-CAMS142-M5.roi_signal_x_profile']
+    tt_sig = data[f'SARES20-CAMS142-{cam}.roi_signal_x_profile']
     i0 = (data['SLAAR21-LSCP1-FNS:CH4:VAL_GET']+data['SLAAR21-LSCP1-FNS:CH5:VAL_GET']+data['SLAAR21-LSCP1-FNS:CH6:VAL_GET']+data['SLAAR21-LSCP1-FNS:CH7:VAL_GET']).compute()
     evts=data['SAR-CVME-TIFALL5:EvtSet'].compute()
     tt_sig = mod_pid(tt_sig, pid_offset)
-    tt_sig, i0, evts = esc.match_arrays (tt_sig,i0,evts)    
+    tt_sig, i0, evts = esc.match_arrays (tt_sig,i0,evts)
     i0, tt_sig = on_off([i0, tt_sig], evts)
     return tt_sig, i0, evts
 
@@ -159,5 +170,39 @@ def refine_reference(data,pos,resolution=1, width=200):
     bns = np.digitize(xd,xb)
     yr = np.bincount(bns.ravel(),weights=data.ravel())/np.bincount(bns.ravel())
     return xr,yr
+
+
+def do_fft(t,tr,lm=None,lx=None,plot=None,fname=None,pad=None):
+
+    if lm is not None and lx is not None:
+        lm = np.argmin(abs(t-lm));
+        lx = np.argmin(abs(t-lx))
+        tr=tr[lm:lx]
+        t=t[lm:lx]
+    if pad is not None:
+        N = t.size
+        te = t[1]-t[0]
+        t = np.arange(N+pad)*te+t[0]
+        trp = np.zeros(N+pad)
+        trp[:N]=tr
+        tr=trp
+
+    N = t.size
+    T = t[N-1]-t[0]
+    te = t[1]-t[0]
+    fe = 1.0/te
+    tfd=np.fft.fft(tr)/N
+    ampl =np.absolute(tfd)
+    freq=np.arange(N)*1.0/T
+    if plot:
+
+        fig,ax = plt.subplots(1,1,num='FFT')
+        ax.plot(freq[1:300],ampl[1:300]*100,'-o',linewidth=2)
+        ax.set_xlabel("Frequency / THz")
+        ax.set_ylabel("Amplitude x 100")
+        ax.grid()
+        ax.legend(frameon=True)
+        ax.set_xlim(1,10)
+    return freq,ampl
 
 ##########################################################################

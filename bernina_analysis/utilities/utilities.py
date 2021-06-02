@@ -209,3 +209,19 @@ def do_fft(t,tr,lm=None,lx=None,plot=None,fname=None,pad=None):
     return freq,ampl
 
 ##########################################################################
+
+def binning(x, data_arrays, bin_size=None):
+	"""
+	x: numpy array or list of the old x positions
+	data_arrays: list of numpy arrays with data arrays to be binned
+	This functionn rebins the data from x_old into x_new. 
+	If no bin_size is chose, it defaults to the difference between 
+	the first elements of the old x axis"""
+	if bin_size is None:
+		bin_size = np.abs(x[1]-x[0])
+    bins = np.arange(np.nanmin(x),np.nanmax(x)-bin_size/2,bin_size)+bin_size/2
+    pos = np.arange(np.nanmin(x),np.nanmax(x)+bin_size/2,bin_size)
+    assined_bin = np.digitize(x,bins)
+    binned_data_arrays = [np.array([np.nansum(dat[(to_bin == i)],axis=0) for i in range(len(pos))]) for dat in data_arrays]
+    return data_arrays
+    

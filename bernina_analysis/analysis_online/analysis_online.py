@@ -15,8 +15,8 @@ from simple_pid import PID
 from time import sleep
 import datetime
 from pathlib import Path
-
-
+from lmfit.models import GaussianModel
+from lmfit import Parameters
 
 
 
@@ -95,7 +95,7 @@ class TtProcessor:
         self.pid_2 = 0
         self.accumulator = Thread(target=self.run_continuously)
         self.accumulator.start()
-
+        self._gaussmod = GaussianModel()
 
 
     def stop(self):
@@ -264,8 +264,19 @@ class TtProcessor:
             bin_width= 6*np.std(dat)/nbins
         bins = np.arange(np.median(dat)-3*np.std(dat), np.median(dat)+3*np.std(dat),bin_width)
         std = np.std(dat)
+
         hist, bins = np.histogram(dat, bins=bins)
-        return freq, amp, hist, bins[:-1]+(bins[1]-bins[0])/2, std
+        bins = bins[:-1]+(bins[1]-bins[0])/2
+        pars = Parameters()
+        pars.add('center',value=bins[np.argmax(hist)])
+        pars.add('amplitude',value=np.max(hist))
+        pars.add('sigma',value=np.std(hist))
+        bins = bins[hist>0]
+        hist=hist[hist>0]
+
+        fit = self._gaussmod.fit(hist, x=bins, params=pars, weights=1/np.sqrt(hist))
+
+        return freq, amp, hist, bins, fit.best_fit, fit.best_values
 
     def setup_plot(self):
         plt.ion()
@@ -303,13 +314,15 @@ class TtProcessor:
         self.axs[1][0].set_xlabel(f'pixel')
         self.axs[1][1].set_xlabel(f'pixel')
 
-        freq, amp, hist, bins, std = self.diag_hist_fft(self.corr_pos)
-        self.axs[2][0].plot(freq, amp)
-        self.axs[3][0].plot(bins, hist)
+        freq, amp, hist, bins, fit, fit_values = self.diag_hist_fft(self.corr_pos)
+        self.axs[2][0].plot(freq, amp, color='royalblue')
+        self.axs[3][0].plot(bins, hist, '.', color='royalblue')
+        self.axs[3][0].plot(bins, fit, 'k')
 
-        freq, amp, hist, bins, std = self.diag_hist_fft(self.corr_amp, nbins=100)
-        self.axs[2][1].plot(freq, amp)
-        self.axs[3][1].plot(bins, hist)
+        freq, amp, hist, bins, fit, fit_values = self.diag_hist_fft(self.corr_amp, nbins=100)
+        self.axs[2][1].plot(freq, amp, color='seagreen')
+        self.axs[3][1].plot(bins, hist, '.', color='seagreen')
+        self.axs[3][1].plot(bins, fit, 'k')
 
         self.axs[2][0].set_ylabel(f'FFT')
         self.axs[2][1].set_ylabel(f'FFT')
@@ -360,13 +373,13 @@ class TtProcessor:
         y = self.tt_ratio_sm[-1]+1
         edgepos =  self.corr_pos[-1][-1]
         self.update_ax_data(self.axs[1][0], [0,1], [x,[edgepos,edgepos]],[y,[0,1]], scale=np.array([True,False]))
-        freq, amp, hist, bins, std = self.diag_hist_fft(self.corr_pos)
+        freq, amp, hist, bins, fit, fit_values = self.diag_hist_fft(self.corr_pos)
         self.update_ax_data(self.axs[2][0], [0], [freq],[amp])
-        self.update_ax_data(self.axs[3][0], [0], [bins],[hist], labels=[f'std {std:.4}'])
-        freq, amp, hist, bins, std = self.diag_hist_fft(self.corr_amp, nbins=100)
+        self.update_ax_data(self.axs[3][0], [0,1], [bins, bins],[hist, fit], labels=['data', f'fwhm {fit_values["sigma"]*2.3548:.4} cen {int(fit_values["center"])}'])
+        freq, amp, hist, bins, fit, fit_values = self.diag_hist_fft(self.corr_amp, nbins=100)
         self.update_ax_data(self.axs[2][1], [0], [freq],[amp])
-        self.update_ax_data(self.axs[3][1], [0], [bins],[hist], labels=[f'std {std:.4}'])
-        #self.fig.canvas.draw()
+        self.update_ax_data(self.axs[3][1], [0,1], [bins, bins],[hist, fit], labels=['data', f'fwhm {fit_values["sigma"]*2.3548:.4} cen {int(fit_values["center"])}'])
+        self.fig.canvas.draw()
         #self.lh_pos_hist.set_data(plt.hist(self.corr_pos))
         #self.lh_corr_hist.set_data(plt.hist(self.corr_amp))
         return

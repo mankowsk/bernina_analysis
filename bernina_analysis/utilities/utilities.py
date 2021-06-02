@@ -17,7 +17,10 @@ def mod_pid(ea,n):
     return esc.Array(data=data, index=index, step_lengths=step_lengths, parameter=parameter)
 
 def correct_ioxos_shape(ea):
-    return esc.Array(data=ea.data.T[0], index = ea.index, parameter = ea.scan.parameter, step_lengths = ea.scan.step_lengths)
+    if len(ea.shape)==2:
+        return esc.Array(data=ea.data.T[0], index = ea.index, parameter = ea.scan.parameter, step_lengths = ea.scan.step_lengths)
+    else:
+        return ea
 
 def create_ea_from_data(ea, data):
     return esc.Array(data=data, index = ea.index, parameter = ea.scan.parameter, step_lengths = ea.scan.step_lengths)

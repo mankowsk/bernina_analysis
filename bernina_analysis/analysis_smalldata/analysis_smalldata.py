@@ -111,9 +111,11 @@ def analyse_filter(runno, filters={'i0_sum':[0,700]}, sig = ['jf_pk'], i0 = ['jf
 def apply_filter(runno, filters={'i0_sum':[0,700]}, sig = ['jf_pk'], plot_hist = False, noimg=False, tt=False, pid_offset=0):
     data = loaddata(f'small_data/run_{runno}.h5')
     if noimg:
-        jfs = {f'jf_{key[13:]}':data[key] for key in data.keys() if 'JF' in key and 'img' not in key}
+        #jfs = {f'jf_{key[13:]}':data[key] for key in data.keys() if 'JF' in key and 'img' not in key}
+        jfs = {f'jf_{key}':data[key] for key in data.keys() if 'JF' in key and 'img' not in key}
     else:
-        jfs = {f'jf_{key[13:]}':data[key] for key in data.keys() if 'JF' in key}
+        #jfs = {f'jf_{key[13:]}':data[key] for key in data.keys() if 'JF' in key}
+        jfs = {f'jf_{key}':data[key] for key in data.keys() if 'JF' in key}
     evts = data[ 'SAR-CVME-TIFALL5:EvtSet'].compute()
     i0s = {f'i0_{key[18:21]}':correct_ioxos_shape(data[key]) for key in data.keys() if 'SLAAR21-LSCP1-FNS:' in key}
     if tt:

@@ -206,13 +206,13 @@ class TtProcessor:
                 elif len(yr)-cen < self.step_width:
                     cen = len(yr)- self.step_width
                 yr = yr[int(cen-self.step_width/2):int(cen+self.step_width/2)]
-                self.edge_roi = [None,None]
+                self.edge_roi = [0,len(yr)]
                 self.edge=yr
 
             elif self.step_type == 'erf':
                 pts = len(self.tt_sig[-1])
                 self.edge = erf_edge(pts, self.step_width)
-                self.edge_roi = [int(pts/2-self.step_width/2), int(pts/2+self.step_width/2)]
+                self.edge_roi = [int(pts/2-2*self.step_width/2), int(pts/2+2*self.step_width/2)]
                 if self.direction == 'falling':
                     self.edge = -self.edge
 

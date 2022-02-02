@@ -23,6 +23,7 @@ from lmfit import Parameters
 class TtProcessor:
     def __init__(
         self,
+        smallplot=True,
         cam = 'M5',
         stream=False,
         fsppx=-2.62,
@@ -34,8 +35,9 @@ class TtProcessor:
         step_width=200,
         smooth = 80,
         roi=[None,None],
+        mask=None,
         save=False,
-        savedir = '/sf/bernina/data/p19125/res/drift_data/'
+        savedir = '/sf/bernina/data/p19319/res/drift_data/'
     ):
         """
         cam:        BS dara address will be appended to
@@ -60,11 +62,13 @@ class TtProcessor:
             self.feedback_control_pv = PV('SLAAR21-LMOT-M523:MOTOR_1')
         except:
             print('Issue with connecting to feedabck')
+        self.smallplot=smallplot
         self.cam=cam
         self.fsppx = fsppx
         self.Nshots = Nshots
         self.Nshots_diag = Nshots_diag
         self.roi=roi
+        self.mask=mask
         self.edge_roi=None
         self.smooth=smooth
         self.save = save
@@ -137,6 +141,8 @@ class TtProcessor:
                 prof = m.data.data[f'SARES20-CAMS142-{self.cam}.roi_signal_x_profile'].value
                 if prof is None:
                     continue
+                if self.mask:
+                    prof = prof[slice(*self.mask)]
                 evt = m.data.data['SAR-CVME-TIFALL5:EvtSet'].value
                 if evt is None:
                     continue
@@ -365,23 +371,27 @@ class TtProcessor:
         y = np.array(self.corr_pos_av)
         ystd =  np.array(self.corr_pos_av_std)
         self.update_ax_data(self.axs[0][0], [0,1,2], [x, x, x],[y, y+ystd, y-ystd])
-        x = np.arange(len(self.corr_amp_av))
-        y = np.array(self.corr_amp_av)
-        ystd =  np.array(self.corr_amp_av_std)
-        self.update_ax_data(self.axs[0][1], [0,1,2], [x, x, x],[y, y+ystd, y-ystd])
         x = np.arange(len(self.tt_ratio_sm[-1]))
         y = self.tt_ratio_sm[-1]+1
         edgepos =  self.corr_pos[-1][-1]
         self.update_ax_data(self.axs[1][0], [0,1], [x,[edgepos,edgepos]],[y,[0,1]], scale=np.array([True,False]))
-        freq, amp, hist, bins, fit, fit_values = self.diag_hist_fft(self.corr_pos)
-        self.update_ax_data(self.axs[2][0], [0], [freq],[amp])
-        self.update_ax_data(self.axs[3][0], [0,1], [bins, bins],[hist, fit], labels=['data', f'fwhm {fit_values["sigma"]*2.3548:.4} cen {int(fit_values["center"])}'])
-        freq, amp, hist, bins, fit, fit_values = self.diag_hist_fft(self.corr_amp, nbins=100)
-        self.update_ax_data(self.axs[2][1], [0], [freq],[amp])
-        self.update_ax_data(self.axs[3][1], [0,1], [bins, bins],[hist, fit], labels=['data', f'fwhm {fit_values["sigma"]*2.3548:.4} cen {int(fit_values["center"])}'])
-        self.fig.canvas.draw()
-        #self.lh_pos_hist.set_data(plt.hist(self.corr_pos))
-        #self.lh_corr_hist.set_data(plt.hist(self.corr_amp))
+
+        if not self.smallplot:
+            x = np.arange(len(self.corr_amp_av))
+            y = np.array(self.corr_amp_av)
+            ystd =  np.array(self.corr_amp_av_std)
+            self.update_ax_data(self.axs[0][1], [0,1,2], [x, x, x],[y, y+ystd, y-ystd])
+
+
+            freq, amp, hist, bins, fit, fit_values = self.diag_hist_fft(self.corr_pos)
+            self.update_ax_data(self.axs[2][0], [0], [freq],[amp])
+            self.update_ax_data(self.axs[3][0], [0,1], [bins, bins],[hist, fit], labels=['data', f'fwhm {fit_values["sigma"]*2.3548:.4} cen {int(fit_values["center"])}'])
+            freq, amp, hist, bins, fit, fit_values = self.diag_hist_fft(self.corr_amp, nbins=100)
+            self.update_ax_data(self.axs[2][1], [0], [freq],[amp])
+            self.update_ax_data(self.axs[3][1], [0,1], [bins, bins],[hist, fit], labels=['data', f'fwhm {fit_values["sigma"]*2.3548:.4} cen {int(fit_values["center"])}'])
+            self.fig.canvas.draw()
+            #self.lh_pos_hist.set_data(plt.hist(self.corr_pos))
+            #self.lh_corr_hist.set_data(plt.hist(self.corr_amp))
         return
 
     def plot_animation(self,name='TT online ana',animate=True):

@@ -1,3 +1,4 @@
+import pandas as pd
 import numpy as np
 import dask.array as da
 import sys
@@ -59,10 +60,10 @@ def refine_max(corr):
     deltas = np.array(  [np.real(root[np.argmin(abs(root))]) for root in roots])
     return deltas
 
-def analyse_edge_correlation(tt_sig, ratio_av=None, roi=[650,1350], debug = False):
+def analyse_edge_correlation(tt_sig, ratio_av=None, roi=[650,1350], debug = False, px_smooth=10):
     #"""tt_sig: dictionary with keys 'on' and 'off', which hold 1d escape arrays of timetool traces with and without overlapped laser and x-ray pulses. The script correlates an average of 100 edges with the individual shots and returns two escape arrays, holding the position of the edge in px and the amplitude of the correlation peak."""
-    tt_sig['off_sm'] = tt_sig['off'].map_index_blocks(scipy.ndimage.uniform_filter, size=(10,10))
-    tt_sig['on_sm'] = tt_sig['on'].map_index_blocks(scipy.ndimage.uniform_filter, size=(1,10))
+    tt_sig['off_sm'] = tt_sig['off'].map_index_blocks(scipy.ndimage.uniform_filter, size=(10,px_smooth))
+    tt_sig['on_sm'] = tt_sig['on'].map_index_blocks(scipy.ndimage.uniform_filter, size=(1,px_smooth))
     idx = np.digitize(tt_sig['on'].index, tt_sig['off'].index[:-1]-0.5)
     tt_ratio_sm = esc.Array(index=tt_sig['on_sm'].index, data=tt_sig['on_sm'].data/tt_sig['off_sm'].data[idx]-1, step_lengths=tt_sig['on_sm'].scan.step_lengths, parameter =tt_sig['on_sm'].scan.parameter )
     corr = tt_ratio_sm.map_index_blocks(scipy.ndimage.correlate1d, ratio_av[roi[0]:roi[1]], axis=1, dtype=np.float64)
@@ -224,4 +225,97 @@ def binning(x, data_arrays, bin_size=None):
     assigned_bin = np.digitize(x,bins)
     binned_data_arrays = [np.array([np.nansum(dat[(assigned_bin == i)],axis=0) for i in range(len(pos))]) for dat in data_arrays]
     return pos, binned_data_arrays
+   
+####### elog posting ########
+
+import elog as _elog_ha
+from getpass import getuser as _getuser
+from getpass import getpass as _getpass
+
+
+class Elog:
+    def __init__(self, url="https://elog-gfa.psi.ch/Bernina", screenshot_directory="", **kwargs):
+        self._log, self.user = self.getDefaultElogInstance(url, **kwargs)
+        self.read = self._log.read
+
+    def getDefaultElogInstance(self, url, **kwargs):
+        from pathlib import Path
+        home = str(Path.home())
+        if not ("user" in kwargs.keys()):
+            kwargs.update(dict(user=_getuser()))
+        if not ("password" in kwargs.keys()):
+            try:
+                with open(os.path.join(home, ".elog_psi"), "r") as f:
+                    _pw = f.read().strip()
+            except:
+                print("Enter elog password for user: %s" % kwargs["user"])
+                _pw = _getpass()
+        kwargs.update(dict(password=_pw))
+        return _elog_ha.open(url, **kwargs), kwargs["user"]
+
+    def post(self, *args, Title=None, Author=None, **kwargs):
+        """"""
+        if not Author:
+            Author = self.user
+        return self._log.post(*args, Title=Title, Author=Author, **kwargs)
     
+    def attach(self, msg_id, fname, *args, **kwargs):
+        message, meta, attach = self._log.read(msg_id)
+        meta.pop('$@MID@$')
+        meta.update({"attachments": [fname]})
+        self.post(message, msg_id=msg_id, **meta )        
+        print(f'Attaching to message id {msg_id} with attachment {fname}')
+        self.post(message, msg_id=msg_id, **kwargs)
+
+class Container:
+    def __init__(self, df, name=''):
+        self._cols = df.columns
+        self._top_level_name = name
+        self._df = df
+        self.__dir__()
+    
+    def _slice_df(self):
+        next_level_names = self._get_next_level_names()
+        try:
+            if len(next_level_names)==0:
+                sdf = self._df[self._top_level_name[:-1]]
+            else:
+                columns_to_keep = [f'{self._top_level_name}{n}' for n in next_level_names if f'{self._top_level_name}{n}' in self._cols]
+                sdf = self._df[columns_to_keep]
+        except:
+            sdf = pd.DataFrame(columns=next_level_names)
+        return sdf
+    
+    def _get_next_level_names(self):
+        if len(self._top_level_name) == 0:
+            next_level_names = np.unique(np.array([n.split('.')[0] for n in self._cols]))
+        else:
+            next_level_names = np.unique(np.array([n.split(self._top_level_name)[1].split('.')[0] for n in self._cols if len(n.split(self._top_level_name))>1]))
+        return next_level_names
+
+    def _create_first_level_container(self, names):
+        for n in names:
+            self.__dict__[n]=Container(self._df, name=self._top_level_name+n+'.')
+
+    def to_dataframe(self):
+        return self._slice_df()
+    
+    def __dir__(self):
+        next_level_names = self._get_next_level_names()
+        to_create = np.array([n for n in next_level_names if not n in self.__dict__.keys()])
+        directory = list(next_level_names)
+        directory.append('to_dataframe')
+        self._create_first_level_container(to_create)
+        return directory
+
+    def __repr__(self):
+        return self._slice_df().T.__repr__()
+
+    def _repr_html_(self):
+        if hasattr(self._slice_df(), '_repr_html_'):
+            return self._slice_df().T._repr_html_()
+        else:
+            return None
+
+    def __getitem__(self, key):
+        return self._slice_df().loc[key]

@@ -24,15 +24,46 @@ from scipy.special import erf
 from scipy.optimize import curve_fit
 import scipy
 from pathlib import Path
+#import zarr
 
 
-def loaddata(f):
+def loaddata(f, chunkreduction_hack=True):
     f = h5py.File(f, "r")
     data = {
         ch: esc.Array.load_from_h5(f, f["channels"][ch][()])
         for ch in f["channels"].keys()
     }
+    if chunkreduction_hack:
+        names = ["SAR-CVME-TIFALL5:EvtSet", "", ""]
+        for name in names:
+            try:
+                refdataset = data[name]
+                print("found")
+                break
+            except:
+                continue
+        for name, arr in data.items():
+            if len(arr.scan) == 1:
+                narr = (
+                    refdataset.ones().__getitem__(
+                        tuple([slice(None)] + [None] * (arr.ndim - 1))
+                    )
+                    * arr
+                )
+                dummy = narr.index
+                data[name] = narr
+                print(f"Fixed escape array {name} for missing scan information.")
+
     return data
+
+
+#def loaddata_zarr(f):
+#    f = zarr.load(f, "a")
+#    data = {
+#        ch: esc.Array.load_from_h5(f, f["channels"][ch][()])
+#        for ch in f["channels"].keys()
+#    }
+#    return data
 
 
 ### To do: class run with functions to average, save, which can be summed up with another run to create a dictionary of runs and apply the timetool correction, filters and so on to multiple runs.
@@ -114,19 +145,14 @@ def analyse_filter(
 
     if plot:
         i0ch = i0[0]
-        jfs = {key: value for key, value in datas_av.items() if "jf" in key}
-        jfs_filt = {key: value for key, value in datas_filt_av.items() if "jf" in key}
+        jfs = {key: value for key, value in datas_av.items() if "jf" in key if not i0ch in key if not 'img' in key}
+        jfs_filt = {key: value for key, value in datas_filt_av.items() if "jf" in key if not i0ch in key}
 
-        fig, ax = plt.subplots(len(jfs.keys()), 2, figsize=(8, 2.5 * len(jfs.keys())))
+        fig, ax = plt.subplots(len(jfs.keys()), 2, figsize=(10, 4 * len(jfs.keys())), num=runno)
 
         for n, ((jf, jfd), (jf_filt, jfd_filt)) in enumerate(
             zip(jfs.items(), jfs_filt.items())
         ):
-            if "img" in jf:
-                jfd["on"] = np.nansum(jfd["on"], axis=(1, 2))
-                jfd["off"] = np.nansum(jfd["off"], axis=(1, 2))
-                jfd_filt["on"] = np.nansum(jfd_filt["on"], axis=(1, 2))
-                jfd_filt["off"] = np.nansum(jfd_filt["off"], axis=(1, 2))
             ax[n][0].plot(
                 xset,
                 (jfd["on"] / datas_av[i0ch]["on"])
@@ -142,9 +168,10 @@ def analyse_filter(
                 label=f"{jf_filt} filtered ratio",
             )
             ax[n][0].set_xlabel(f"{xname}")
-            ax[n][0].set_ylabel(f" on/off i0 normalized")
+            ax[n][0].set_ylabel(f"on/off i0 normalized")
+            ax[n][1].set_ylabel(f"i/ {i0ch}")
             ax[n][0].set_title(f"Roi {jf}")
-            ax[n][0].legend()
+
             ax[n][1].set_title(f"Roi {jf}")
 
             ax[n][1].plot(
@@ -158,14 +185,17 @@ def analyse_filter(
                 xset_filt,
                 (jfd_filt["on"] / datas_filt_av[i0ch]["on"]),
                 "blue",
-                label=f"{jf_filt} filtered on",
+                label=f"{jf_filt} filt on",
             )
             ax[n][1].plot(
                 xset_filt,
                 (jfd_filt["off"] / datas_filt_av[i0ch]["off"]),
                 "red",
-                label=f"{jf_filt} filtered",
+                label=f"{jf_filt} filt off",
             )
+            ax[n][0].legend()
+            ax[n][1].legend()
+        fig.suptitle(f'Run {runno}')
         fig.tight_layout()
 
     datas_av.update(
@@ -197,8 +227,8 @@ def analyse_filter(
 
 def apply_filter(
     runno,
-    filters={"i0_sum": [0, 700]},
-    sig=["jf_pk"],
+    filters={"i0_sum": [0, 700], "i0_x": "auto", "i0_y": "auto"},
+    sig=["jf_JFXRD_rois_pk"],
     plot_hist=False,
     noimg=False,
     tt=False,
@@ -223,6 +253,25 @@ def apply_filter(
         for key in data.keys()
         if "SLAAR21-LSCP1-FNS:" in key
     }
+    try:
+        i0s.update(
+            {
+                f"i0_138_CH{n}": data[f'SAROP21-CVME-PBPS2:Lnk9Ch{n}-DATA-SUM'] for n in range(1,5)
+            }
+
+        )
+        i0s["i0_sum_138"] = (
+            i0s["i0_138_CH3"] - i0s["i0_138_CH4"] + i0s["i0_138_CH3"] + i0s["i0_138_CH4"]
+        )
+        i0s["i0_x_138"] = (
+            i0s["i0_138_CH3"]/np.median((i0s["i0_138_CH3"].data).compute()) - i0s["i0_138_CH4"]/np.median((i0s["i0_138_CH4"].data).compute())
+        )
+        i0s["i0_y_138"] = (
+            i0s["i0_138_CH1"]/np.median((i0s["i0_138_CH1"].data).compute()) - i0s["i0_138_CH2"]/np.median((i0s["i0_138_CH2"].data).compute())
+        )
+
+    except:
+        print('PBPS 138 not in data')
     if tt:
         tt_chs = {
             "tt_sig": mod_pid(
@@ -237,6 +286,8 @@ def apply_filter(
     datas["i0_sum"] = (
         datas["i0_CH4"] + datas["i0_CH5"] + datas["i0_CH6"] + datas["i0_CH7"]
     )
+
+
     datas.update(
         calc_i0_pos_ea(
             *esc.match_arrays(
@@ -294,13 +345,19 @@ def apply_filter(
             mm = mm & m
         filt[las] = mm
         filt_ea[las] = esc.Array(index=datas["i0_sum"][las].index, data=mm)
-
-        filt_ratio[las] = sum(mm) / len(mm) * 100
-        print(f"After filtering {sum(mm)/len(mm)*100}% of the {las} pulses remaining")
+        if len(mm) == 0:
+            print(f'No {las} shots in the data')
+        else:
+            filt_ratio[las] = sum(mm) / len(mm) * 100
+            print(f"After filtering {sum(mm)/len(mm)*100}% of the {las} pulses remaining")
 
     # plot histograms of the filters
     if plot_hist:
+        print(f'Keys in data: {datas.keys()}')
         plt.ion()
+        naxs = len(filters.keys())
+        if naxs < 2:
+            naxs = 2
         fig, ax = plt.subplots(
             len(filters.keys()), 2, figsize=(8, 2.5 * (len(filters.keys())))
         )
@@ -314,24 +371,30 @@ def apply_filter(
             )
             d_med = np.median(datas[k]["off"].data)
             bins = np.linspace(d_med - 4 * d_std, d_med + 4 * d_std, 200)
+            print(n)
             ax[n][0].hist(datas[k]["off"].data, bins=bins)
             ax[n][0].set_title(f"Run {runno} {k} histogram")
             ax[n][0].axvline(th[0], linewidth=1, color="red")
             ax[n][0].axvline(th[1], linewidth=1, color="red")
             ax[n][1].plot(
-                datas[k]["off"].data[:2000], datas[sig[0]]["off"].data[:2000], "."
+                datas[k]["off"].data[:2000],
+                datas[sig[0]]["off"].data[:2000],
+                ".",
+                markersize=1,
             )
             ax[n][1].plot(
                 (datas[k]["off"][:2000])[mask[n][:2000]].data,
                 (datas[sig[0]]["off"][:2000])[mask[n][:2000]].data,
                 ".",
                 label="filter",
+                markersize=1,
             )
             ax[n][1].plot(
                 (datas[k]["off"][:2000])[filt["off"][:2000]].data,
                 (datas[sig[0]]["off"][:2000])[filt["off"][:2000]].data,
                 ".",
                 label="all_filter",
+                markersize=1,
             )
             # ax[n][0].set_xlim([bins[0],bins[-1]])
             ax[n][1].set_xlabel(k)
@@ -361,8 +424,11 @@ def analyse_filter_timetool(
     noimg=True,
     tt_offset=0,
     tt_amp_min=0,
+    edge_width=100,
+    px_smooth=10,
     corr_by_max=False,
     dir_name="small_data",
+    name=''
 ):
     tt_filename = f"{dir_name}/run_{runno}_jitter.h5"
     datas, evts, filt, filt_ea, filt_ratio = apply_filter(
@@ -373,6 +439,7 @@ def analyse_filter_timetool(
         noimg=noimg,
         tt=True,
         pid_offset=pid_offset,
+        name=name
     )
     data = loaddata(f"{dir_name}/run_{runno}.h5")
 
@@ -444,12 +511,21 @@ def analyse_filter_timetool(
     xrb_filt = xrb_filt * 1e12
 
     # time tool correction
+    width = edge_width
+    erf_ratio = erf_edge(datas["tt_sig"]["on"].shape[1], width)
+    roi = [
+        int((datas["tt_sig"]["on"].shape[1]) / 2 - width),
+        int((datas["tt_sig"]["on"].shape[1]) / 2 + width),
+    ]
+
     if not overwrite_tt and os.path.exists(tt_filename):
         with h5py.File(tt_filename, "r") as f_tt:
             edge_pos_ea = esc.Array.load_from_h5(f_tt, "edge_pos").compute()
             edge_amp_ea = esc.Array.load_from_h5(f_tt, "edge_amp").compute()
     else:
-        edge_pos_ea, edge_amp_ea = analyse_edge_correlation(datas["tt_sig"])
+        edge_pos_ea, edge_amp_ea = analyse_edge_correlation(
+            datas["tt_sig"], ratio_av=erf_ratio, roi=roi, px_smooth=px_smooth
+        )
         with h5py.File(Path(tt_filename).expanduser(), "w") as f_tt:
             edge_pos_ea.store(f_tt, "edge_pos")
             edge_amp_ea.store(f_tt, "edge_amp")
@@ -481,7 +557,7 @@ def analyse_filter_timetool(
         )
 
     if not bin_size:
-        bin_size = bin_size = xset[1] - xset[0]
+        bin_size = bin_size = abs(xset[1] - xset[0])
     edge_pos_ps = edge_pos_ps * calib
     if corr_by_max:
         on = datas_av["jf_pk"]["on"] / datas_av["jf_fl"]["on"]
@@ -554,8 +630,12 @@ def analyse_filter_timetool(
     }
     if save:
         print("saving")
-        dsg.save(f"text_data/run_{runno}_filt_tt.h5", full_data)
-        Path(f"text_data/run_{runno}_filt_tt.h5").chmod(0o775)
+        if type(save) is str:
+            filename = save
+        else:
+            filename = f"text_data/run_{runno}_filt_tt.h5"
+        dsg.save(filename, full_data)
+        Path(filename).chmod(0o775)
 
     return full_data
 

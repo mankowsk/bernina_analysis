@@ -71,6 +71,7 @@ def loaddata(f, chunkreduction_hack=True):
 
 def analyse_filter(
     runno,
+    data = None,
     filters={"i0_sum": [0, 700]},
     sig=["jf_pk"],
     i0=["jf_fl"],
@@ -81,7 +82,7 @@ def analyse_filter(
     name="",
 ):
     datas, evts, filt, filt_ea, filt_ratio = apply_filter(
-        runno, filters=filters, sig=sig, plot_hist=plot_hist, noimg=noimg, name=name
+        runno, data=data, filters=filters, sig=sig, plot_hist=plot_hist, noimg=noimg, name=name
     )
 
     xname = list(evts.scan.parameter)[1]
@@ -227,6 +228,7 @@ def analyse_filter(
 
 def apply_filter(
     runno,
+    data = None,
     filters={"i0_sum": [0, 700], "i0_x": "auto", "i0_y": "auto"},
     sig=["jf_JFXRD_rois_pk"],
     plot_hist=False,
@@ -236,7 +238,8 @@ def apply_filter(
     name="",
     dir_name="small_data",
 ):
-    data = loaddata(f"{dir_name}/run_{runno}{name}.h5")
+    if data is None:
+        data = loaddata(f"{dir_name}/run_{runno}{name}.h5")
     if noimg:
         # jfs = {f'jf_{key[13:]}':data[key] for key in data.keys() if 'JF' in key and 'img' not in key}
         jfs = {

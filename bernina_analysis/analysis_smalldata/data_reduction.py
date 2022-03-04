@@ -28,7 +28,7 @@ class Data_Reduction():
 
     def __init__(
         self,
-        cfg_file,
+        cfg_file = {},
         no_jfutils=True,
         do_slice=False,
         maxshots=500,
@@ -47,6 +47,7 @@ class Data_Reduction():
         self.ds = {}
         self.no_jfutils=no_jfutils
         self.multi_limits = multi_limits
+
     def update_cfg(self, cfg_file=None):
         if not cfg_file:
             cfg_file=self.cfg_file
@@ -71,6 +72,24 @@ class Data_Reduction():
                     if value == "None":
                         self.cfg['JFs'][jf][key]=None
 
+    def autolocate_closest_pedestals(self, jf, runno):
+        jf_cfg = self.cfg['JFs'][jf]
+        pgroup = self.cfg['Exp_config']['pgroup']
+        pedestal_path = Path(f'/sf/jungfrau/data/pedestal/{jf_cfg["id"]}/')
+        pedestal_files = np.array([[f.lstat().st_mtime, f] for f in pedestal_path.glob('*.h5')]).T
+        json_dir = Path(f'/sf/bernina/data/{pgroup}/res/scan_info/')
+        json_file = Path(list(json_dir.glob(f'run{runno:04}*'))[0])
+        with json_file.open(mode="r") as f:
+            s = json.load(f)
+            f = [f for f in s['scan_files'][0] if jf_cfg['id'] in f][0]
+        jf_file_mtime = Path(f).lstat().st_mtime
+        idx = np.argmin(abs(pedestal_files[0]-jf_file_mtime))
+        pedestal_file = pedestal_files[1][idx].as_posix()
+        dt = jf_file_mtime - pedestal_files[0][idx]
+        days = dt // (24 * 3600)
+        hours = dt % (24 * 3600) // 3600
+        print(f'Located closest pedestal file dated back {days} days, {hours} hours: {pedestal_file}')
+        return pedestal_file
 
     def setup_data_handlers(self, scan_info):
         jf_handlers = {}
@@ -84,7 +103,6 @@ class Data_Reduction():
                     pedestal_file = pedestal_file,
                     )
         return jf_handlers
-
 
     def parse_scan(self, runno, exclude_files):
         pgroup = self.cfg['Exp_config']['pgroup']
@@ -449,7 +467,12 @@ class Data_Reduction():
 
         self.cfg['other']=self.channels
 
-    def data_reduction(self, runno, exclude_files=['IMAGE'],name=False, overwrite='question'):
+    def data_reduction(self, runno, exclude_files=['IMAGE'],name=False, overwrite='question', autolocate_pedestal = True):
+        if autolocate_pedestal:
+            for jf in self.cfg['JFs']:
+                jfcfg = self.cfg['JFs'][jf]
+                ped_file = self.autolocate_closest_pedestal(jf, runno)
+                jfcfg['pedestal_file'] = ped_file
         data, scan_info = self.parse_scan(runno,exclude_files)
         poss = np.squeeze(scan_info['scan_values'])
 
@@ -460,7 +483,9 @@ class Data_Reduction():
         self.update_channels()
         ds, fname = self.setup_filename(runno, name, overwrite)
         self.ds = ds
-
+        data_dir = Path(os.path.dirname(fname))
+        if not data_dir.exists():
+            data_dir.mkdir(parents=True)
         with h5py.File(Path(fname).expanduser(), 'a') as f:
             chsgrp = f.require_group('channels')
 

@@ -1,6 +1,6 @@
 from pathlib import Path
 import sys
-sys.path.insert(0,'/sf/bernina/config/src/python/escape-fel/')
+# sys.path.insert(0,'/sf/bernina/config/src/python/escape-fel/')
 import numpy as np
 
 import os
@@ -42,7 +42,7 @@ class Data_Reduction():
         self.cfg= {}
         self.update_cfg()
         """global parameters"""
-        self.dir_save = '/sf/bernina/data/{}/work/analysis/{}/'.format(self.cfg['Exp_config']['pgroup'] ,self.cfg['Exp_config']['save_folder'])
+        self.dir_save = '/sf/bernina/data/{}/work/{}/'.format(self.cfg['Exp_config']['pgroup'] ,self.cfg['Exp_config']['save_folder'])
         self.channels = {}
         self.ds = {}
         self.no_jfutils=no_jfutils
@@ -72,11 +72,16 @@ class Data_Reduction():
                     if value == "None":
                         self.cfg['JFs'][jf][key]=None
 
-    def autolocate_closest_pedestals(self, jf, runno):
+    def autolocate_closest_pedestal(self, jf, runno):
         jf_cfg = self.cfg['JFs'][jf]
+        jf_id = jf_cfg['id']
         pgroup = self.cfg['Exp_config']['pgroup']
         pedestal_path = Path(f'/sf/jungfrau/data/pedestal/{jf_cfg["id"]}/')
-        pedestal_files = np.array([[f.lstat().st_mtime, f] for f in pedestal_path.glob('*.h5')]).T
+        pedestal_files = np.array([[f.lstat().st_mtime, f] for f in pedestal_path.glob('*.h5') if jf_id in f.as_posix()]).T
+        pedestal_path2 = Path(f'/sf/bernina/data/{pgroup}/raw/JF_pedestals/')
+        pedestal_files2 = np.array([[f.lstat().st_mtime, f] for f in pedestal_path2.glob('*.h5') if jf_id in f.as_posix()]).T
+        pedestal_files = np.hstack([pedestal_files, pedestal_files2])
+        pedestal_files = np.sort(pedestal_files, axis=1)
         json_dir = Path(f'/sf/bernina/data/{pgroup}/res/scan_info/')
         json_file = Path(list(json_dir.glob(f'run{runno:04}*'))[0])
         with json_file.open(mode="r") as f:
@@ -84,6 +89,8 @@ class Data_Reduction():
             f = [f for f in s['scan_files'][0] if jf_cfg['id'] in f][0]
         jf_file_mtime = Path(f).lstat().st_mtime
         idx = np.argmin(abs(pedestal_files[0]-jf_file_mtime))
+        if pedestal_files[0][idx]-jf_file_mtime >0 and idx >0:
+            idx = idx-1
         pedestal_file = pedestal_files[1][idx].as_posix()
         dt = jf_file_mtime - pedestal_files[0][idx]
         days = dt // (24 * 3600)
@@ -345,7 +352,7 @@ class Data_Reduction():
         for i,(r,r_rng)  in enumerate(rois.items()):
             if type(r_rng)==dict:
                 r_rng = r_rng['range']
-            ax1[i].imshow(self.mkroi(img, r_rng),clim=clim)
+            ax1[i].imshow(self.mkroi(img, r_rng),clim=clim, origin='lower')
             ax1[i].set_title('{}'.format(r))
             rr =r_rng
             ax0.add_patch(Rectangle((rr[2], rr[0]), abs(rr[2]-rr[3]),abs(rr[1]-rr[0]),fill=None,
@@ -353,7 +360,7 @@ class Data_Reduction():
 
         for i,(r,r_rng)  in enumerate(rois_img.items()):
             i +=len(rois.keys())
-            ax1[i].imshow(self.mkroi(img, r_rng),clim=clim)
+            ax1[i].imshow(self.mkroi(img, r_rng),clim=clim, origin='lower')
             ax1[i].set_title('Img {}'.format(r))
             rr =r_rng
             ax0.add_patch(Rectangle((rr[2], rr[0]), abs(rr[2]-rr[3]),abs(rr[1]-rr[0]),fill=None,
@@ -371,9 +378,14 @@ class Data_Reduction():
         data['hist_bins']=bins
         return data
 
-    def showdata(self, runno, step,exclude_files, jf=None, maxshots = None, clim=(0,20), hist_lineout = False):
-        if not jf:
-            jf = 'JFscatt'
+    def showdata(self, runno, step,exclude_files, maxshots = None, clim=(0,20), jf=None, hist_lineout = False, autolocate_pedestal=True):
+        if jf is None:
+            jf = list(self.cfg['JFs'].keys())[0]
+        if autolocate_pedestal:
+            for j in self.cfg['JFs'].keys():
+                jfcfg = self.cfg['JFs'][j]
+                ped_file = self.autolocate_closest_pedestal(j, runno)
+                jfcfg['pedestal_file'] = ped_file
         jf_cfg = self.cfg['JFs'][jf]
         pgroup = self.cfg['Exp_config']['pgroup']
         pedestal_file = jf_cfg['pedestal_file']
@@ -409,7 +421,9 @@ class Data_Reduction():
                 data['hists_vertical']=hists_vertical
             hist_av = np.histogram(imgs_ju[:100], bins=bins)
             data['hist_av']=hist_av
-        fig = plt.figure(num='Run_{}, Step_{}. Nbr_shots = {}'.format(runno,step, nshots), figsize=(9,9))
+        figname = 'Run_{}, Step_{}. Nbr_shots = {}'.format(runno,step, nshots)
+        plt.close(figname)
+        fig = plt.figure(num=figname, figsize=(9,9))
         ax0= fig.add_subplot(1,2,1)
         ax0.imshow(img,clim=clim,origin='lower')
         ax1=[]
@@ -430,7 +444,7 @@ class Data_Reduction():
             rr =r_rng
             ax0.add_patch(Rectangle((rr[2], rr[0]), abs(rr[2]-rr[3]),abs(rr[1]-rr[0]),fill=None,
                           alpha=1,linewidth=2, edgecolor='r'))
-
+            ax0.text(rr[2],rr[1],r,color='white')
         for i,(r,r_rng)  in enumerate(rois_img.items()):
             i +=len(rois.keys())
             ax1[i].imshow(self.mkroi(img, r_rng),clim=clim)
@@ -469,7 +483,8 @@ class Data_Reduction():
 
     def data_reduction(self, runno, exclude_files=['IMAGE'],name=False, overwrite='question', autolocate_pedestal = True):
         if autolocate_pedestal:
-            for jf in self.cfg['JFs']:
+            print(self.cfg['JFs'])
+            for jf in self.cfg['JFs'].keys():
                 jfcfg = self.cfg['JFs'][jf]
                 ped_file = self.autolocate_closest_pedestal(jf, runno)
                 jfcfg['pedestal_file'] = ped_file

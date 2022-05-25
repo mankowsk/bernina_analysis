@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 import sys
 
-sys.path.insert(0, "/sf/bernina/config/src/python/escape_dev/")
+# sys.path.insert(0, "/sf/bernina/config/src/python/escape_dev/")
 import escape.parse.swissfel as sf
 import h5py
 import escape as esc
@@ -80,9 +80,11 @@ def analyse_filter(
     save=False,
     noimg=True,
     name="",
+    dir_name = "small_data",
+    dir_save_name = 'derived_data'
 ):
     datas, evts, filt, filt_ea, filt_ratio = apply_filter(
-        runno, data=data, filters=filters, sig=sig, plot_hist=plot_hist, noimg=noimg, name=name
+        runno, data=data, filters=filters, sig=sig, plot_hist=plot_hist, noimg=noimg, name=name, dir_name=dir_name
     )
 
     xname = list(evts.scan.parameter)[1]
@@ -220,11 +222,10 @@ def analyse_filter(
     }
 
     if save:
-        dsg.save(f"text_data/run_{runno}_filt_dev.h5", full_data)
-        Path(f"text_data/run_{runno}_filt_dev.h5").chmod(0o775)
+        dsg.save(f"{dir_save_name}/run_{runno}_filt.h5", full_data)
+        Path(f"{dir_save_name}/run_{runno}_filt.h5").chmod(0o775)
 
     return full_data
-
 
 def apply_filter(
     runno,
@@ -275,6 +276,14 @@ def apply_filter(
 
     except:
         print('PBPS 138 not in data')
+
+    i0s.update(
+        {
+            "i0_sum": data['SLAAR21-LTIM01-EVR0:CALCI'],
+            "i0_x": data["SLAAR21-LTIM01-EVR0:CALCX"],
+            "i0_y": data["SLAAR21-LTIM01-EVR0:CALCY"],
+        }
+    )
     if tt:
         tt_chs = {
             "tt_sig": mod_pid(
@@ -285,19 +294,24 @@ def apply_filter(
         tt_chs = {}
     datas = {**jfs, **i0s, **tt_chs}
 
+
+
+
     # add the sum of the i0 diodes
-    datas["i0_sum"] = (
-        datas["i0_CH4"] + datas["i0_CH5"] + datas["i0_CH6"] + datas["i0_CH7"]
-    )
 
+    ### old, before the calculations on the ioxos worked ###
+    #datas["i0_sum"] = (
+    #    datas["i0_CH4"] + datas["i0_CH5"] + datas["i0_CH6"] + datas["i0_CH7"]
+    #)
 
-    datas.update(
-        calc_i0_pos_ea(
-            *esc.match_arrays(
-                datas["i0_CH4"], datas["i0_CH5"], datas["i0_CH6"], datas["i0_CH7"]
-            )
-        )
-    )
+    ### old, before the calculations on the ioxos worked
+    #datas.update(
+    #    calc_i0_pos_ea(
+    #        *esc.match_arrays(
+    #            datas["i0_CH4"], datas["i0_CH5"], datas["i0_CH6"], datas["i0_CH7"]
+    #        )
+    #    )
+    #)
 
     # compute arrays used for filter
     datas.update(
@@ -431,6 +445,7 @@ def analyse_filter_timetool(
     px_smooth=10,
     corr_by_max=False,
     dir_name="small_data",
+    dir_save_name = 'derived_data',
     name=''
 ):
     tt_filename = f"{dir_name}/run_{runno}_jitter.h5"
@@ -442,7 +457,8 @@ def analyse_filter_timetool(
         noimg=noimg,
         tt=True,
         pid_offset=pid_offset,
-        name=name
+        name=name,
+        dir_name=dir_name
     )
     data = loaddata(f"{dir_name}/run_{runno}.h5")
 
@@ -636,7 +652,7 @@ def analyse_filter_timetool(
         if type(save) is str:
             filename = save
         else:
-            filename = f"text_data/run_{runno}_filt_tt.h5"
+            filename = f"{dir_save_name}/run_{runno}_filt_tt.h5"
         dsg.save(filename, full_data)
         Path(filename).chmod(0o775)
 

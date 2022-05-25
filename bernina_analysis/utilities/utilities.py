@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import dask.array as da
 import sys
-sys.path.insert(0,'/sf/bernina/config/src/python/escape_dev/')
+# sys.path.insert(0,'/sf/bernina/config/src/python/escape_dev/')
 import escape.parse.swissfel as sf
 import h5py
 import escape as esc

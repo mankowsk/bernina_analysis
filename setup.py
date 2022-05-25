@@ -1,10 +1,10 @@
 from setuptools import setup
 
 setup(
-    name = 'bernina_analysis'
-    version = '0.0.1'
-    description = 'Analysis scripts for SwissFEL data'
-    url = 'https://github.com/mankowsk/bernina_analysis'
+    name = 'bernina_analysis',
+    version = '0.0.1',
+    description = 'Analysis scripts for Bernina SwissFEL data',
+    url = 'https://github.com/mankowsk/bernina_analysis',
     author='Roman Mankowsky',
     author_email='roman.mankowsky@psi.ch',
     packages=setuptools.find_packages(),

@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name = 'bernina_analysis',
@@ -7,7 +7,7 @@ setup(
     url = 'https://github.com/mankowsk/bernina_analysis',
     author='Roman Mankowsky',
     author_email='roman.mankowsky@psi.ch',
-    packages=setuptools.find_packages(),
+    packages=find_packages(),
     requires=["numpy"],
     classifiers=(
         "Programming Language :: Python :: 3",

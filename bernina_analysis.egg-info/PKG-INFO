@@ -1,0 +1,16 @@
+Metadata-Version: 2.1
+Name: bernina-analysis
+Version: 0.0.1
+Summary: Analysis scripts for Bernina SwissFEL data
+Home-page: https://github.com/mankowsk/bernina_analysis
+Author: Roman Mankowsky
+Author-email: roman.mankowsky@psi.ch
+License: UNKNOWN
+Platform: UNKNOWN
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires: numpy
+
+UNKNOWN
+
